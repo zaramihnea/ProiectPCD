@@ -1,0 +1,12 @@
+image:
+  repository: "" # {{ .Values.acrLoginServer }}/websocket-gateway
+
+replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 8080
+
+cosmosDbEndpoint: ""
+cosmosDbKey: ""
+prometheusUrl: "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090"

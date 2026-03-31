@@ -12,5 +12,6 @@ environments:
 
 helmfiles:
   - ../../../releases/listmonk.yaml.gotmpl
+  - ../../../releases/websocket-gateway.yaml.gotmpl
   - ../../../releases/prometheus.yaml.gotmpl
   - ../../../releases/frontend.yaml.gotmpl

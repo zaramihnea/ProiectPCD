@@ -1,0 +1,10 @@
+releases:
+  - name: websocket-gateway
+    labels:
+      domain: backend
+      component: websocket-gateway
+    namespace: websocket-gateway
+    chart: acr/websocket-gateway
+    version: "0.1.0"
+    values:
+      - {{ .Values.valuesDir }}/websocket-gateway/values.yaml
