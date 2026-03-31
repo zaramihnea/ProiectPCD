@@ -43,3 +43,4 @@ build/
 *.test
 *.out
 vendor/
+CLAUDE.md
