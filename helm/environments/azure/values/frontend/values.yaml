@@ -1,0 +1,4 @@
+image:
+  repository: "" # {{ .Values.acrLoginServer }}/frontend
+
+websocketGatewayUrl: ""

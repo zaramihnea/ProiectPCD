@@ -1,0 +1,30 @@
+grafana:
+  enabled: true
+  adminPassword: ""
+
+prometheus:
+  prometheusSpec:
+    retention: 7d
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "512Mi"
+      limits:
+        cpu: "500m"
+        memory: "1Gi"
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: managed-csi
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 20Gi
+
+alertmanager:
+  enabled: false
+
+additionalScrapeConfigs:
+  - job_name: websocket-gateway
+    static_configs:
+      - targets: ["websocket-gateway.default.svc.cluster.local:8080"]

@@ -1,0 +1,10 @@
+releases:
+  - name: frontend
+    labels:
+      domain: frontend
+      component: frontend
+    namespace: frontend
+    chart: acr/frontend
+    version: "0.1.0"
+    values:
+      - {{ .Values.valuesDir }}/frontend/values.yaml

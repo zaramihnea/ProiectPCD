@@ -1,0 +1,45 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+.terraform.lock.hcl
+terraform.tfvars
+*.tfplan
+
+# Kubernetes / Helm
+kubeconfig
+*.kubeconfig
+*-secret.yaml
+*-secrets.yaml
+
+# Environment / secrets
+.env
+*.env.local
+*.env.production
+.envrc
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverrideDirectory
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Node.js (WebSocket Gateway)
+node_modules/
+dist/
+build/
+
+# Go (Listmonk / event-processor)
+*.exe
+*.test
+*.out
+vendor/

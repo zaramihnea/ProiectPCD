@@ -1,0 +1,10 @@
+image:
+  repository: "" # {{ .Values.acrLoginServer }}/listmonk
+
+replicaCount: 2
+
+postgresql:
+  primary:
+    persistence:
+      storageClass: managed-csi
+      size: 10Gi
