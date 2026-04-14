@@ -27,4 +27,4 @@ alertmanager:
 additionalScrapeConfigs:
   - job_name: websocket-gateway
     static_configs:
-      - targets: ["websocket-gateway.default.svc.cluster.local:8080"]
+      - targets: ["websocket-gateway.websocket-gateway.svc.cluster.local:8080"]

@@ -12,7 +12,7 @@ variable "resource_group_name" {
 variable "location" {
   type        = string
   description = "Azure region"
-  default     = "northeurope"
+  default     = "swedencentral"
 }
 
 variable "project" {
@@ -36,7 +36,7 @@ variable "aks_node_count" {
 variable "aks_node_size" {
   type        = string
   description = "AKS user node VM size"
-  default     = "Standard_B2s"
+  default     = "Standard_B2s_v2"
 }
 
 variable "servicebus_sku" {
@@ -49,4 +49,10 @@ variable "cosmosdb_max_throughput" {
   type        = number
   description = "Cosmos DB max autoscale throughput (RU/s)"
   default     = 1000
+}
+
+variable "websocket_notify_url" {
+  type        = string
+  description = "Internal URL of the WebSocket gateway /notify endpoint — populated after AKS deploy"
+  default     = ""
 }

@@ -1,0 +1,27 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: websocket-gateway
+  namespace: websocket-gateway
+spec:
+  parentRefs:
+    - name: traefik-gateway
+      namespace: traefik
+      sectionName: web
+  hostnames:
+    - "$DOMAIN"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /ws
+      backendRefs:
+        - name: websocket-gateway
+          port: 8080
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /notify
+      backendRefs:
+        - name: websocket-gateway
+          port: 8080

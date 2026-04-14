@@ -1,0 +1,19 @@
+service:
+  type: LoadBalancer
+  annotations:
+    service.beta.kubernetes.io/azure-load-balancer-health-probe-request-path: /ping
+
+ingressRoute:
+  dashboard:
+    enabled: false
+
+providers:
+  kubernetesGateway:
+    enabled: true
+
+# Disable chart-managed Gateway; we create our own (HTTP only) in manifests
+gateway:
+  enabled: false
+
+additionalArguments:
+  - "--serversTransport.insecureSkipVerify=true"

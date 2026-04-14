@@ -1,10 +1,23 @@
 image:
-  repository: "" # {{ .Values.acrLoginServer }}/listmonk
+  repository: "" # fill from: terraform output acr_login_server => <acr>/listmonk
 
 replicaCount: 2
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: listmonk
+          topologyKey: kubernetes.io/hostname
 
 postgresql:
   primary:
     persistence:
       storageClass: managed-csi
       size: 10Gi
+
+# Injected at deploy time: helm upgrade --set serviceBusConnectionString=<value>
+serviceBusConnectionString: "" # from: terraform output servicebus_connection_string

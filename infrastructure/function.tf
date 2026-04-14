@@ -33,6 +33,7 @@ resource "azurerm_linux_function_app" "event_processor" {
   }
 
   app_settings = {
+    WEBSITES_RUN_FROM_PACKAGE    = "1"
     SERVICEBUS_CONNECTION_STRING = azurerm_servicebus_namespace.main.default_primary_connection_string
     SERVICEBUS_TOPIC             = azurerm_servicebus_topic.resource_events.name
     SERVICEBUS_SUBSCRIPTION      = azurerm_servicebus_subscription.event_processor.name
@@ -40,6 +41,8 @@ resource "azurerm_linux_function_app" "event_processor" {
     COSMOS_KEY                   = azurerm_cosmosdb_account.main.primary_key
     COSMOS_DATABASE              = azurerm_cosmosdb_sql_database.analytics.name
     COSMOS_CONTAINER             = azurerm_cosmosdb_sql_container.events.name
+    # Set after AKS deploy: terraform apply -var websocket_notify_url=http://<LB-IP>/notify
+    WEBSOCKET_NOTIFY_URL         = var.websocket_notify_url
   }
 
   tags = local.tags

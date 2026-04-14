@@ -1,5 +1,5 @@
 image:
-  repository: "" # {{ .Values.acrLoginServer }}/websocket-gateway
+  repository: "" # fill from: terraform output acr_login_server => <acr>/websocket-gateway
 
 replicaCount: 1
 
@@ -7,6 +7,8 @@ service:
   type: ClusterIP
   port: 8080
 
-cosmosDbEndpoint: ""
-cosmosDbKey: ""
+# Injected at deploy time — never commit real values here
+cosmosDbEndpoint: ""  # from: terraform output cosmosdb_endpoint
+cosmosDbKey: ""       # from: terraform output cosmosdb_primary_key
+serviceBusConnectionString: ""  # from: terraform output servicebus_connection_string
 prometheusUrl: "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090"

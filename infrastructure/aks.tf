@@ -12,6 +12,8 @@ resource "azurerm_kubernetes_cluster" "main" {
     type                = "VirtualMachineScaleSets"
   }
 
+  oidc_issuer_enabled = true
+
   identity {
     type = "SystemAssigned"
   }

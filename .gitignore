@@ -2,9 +2,9 @@
 .terraform/
 *.tfstate
 *.tfstate.backup
-.terraform.lock.hcl
 terraform.tfvars
 *.tfplan
+# .terraform.lock.hcl is intentionally committed — pins provider versions
 
 # Kubernetes / Helm
 kubeconfig
@@ -17,6 +17,12 @@ kubeconfig
 *.env.local
 *.env.production
 .envrc
+
+# Local task/notes files
+*.txt
+
+# Claude Code
+.claude/
 
 # macOS
 .DS_Store
