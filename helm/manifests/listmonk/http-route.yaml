@@ -7,14 +7,14 @@ spec:
   parentRefs:
     - name: traefik-gateway
       namespace: traefik
-      sectionName: web
+      sectionName: websecure
   hostnames:
-    - "$DOMAIN"
+    - "listmonk.proiectpcd.online"
   rules:
     - matches:
         - path:
             type: PathPrefix
-            value: /listmonk
+            value: /
       backendRefs:
         - name: listmonk
           port: 9000

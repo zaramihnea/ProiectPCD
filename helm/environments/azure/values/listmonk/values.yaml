@@ -1,7 +1,9 @@
-image:
-  repository: "" # fill from: terraform output acr_login_server => <acr>/listmonk
+proxy:
+  image:
+    repository: "proiectpcdproductionacr.azurecr.io/listmonk-proxy"
+    tag: latest
 
-replicaCount: 2
+replicaCount: 1
 
 affinity:
   podAntiAffinity:
@@ -19,5 +21,9 @@ postgresql:
       storageClass: managed-csi
       size: 10Gi
 
-# Injected at deploy time: helm upgrade --set serviceBusConnectionString=<value>
-serviceBusConnectionString: "" # from: terraform output servicebus_connection_string
+adminUser: admin
+adminEmail: "admin@proiectpcd.local"
+
+# Injected at deploy time — never commit real values
+adminPassword: ""        # --set adminPassword=<value>
+serviceBusConnectionString: ""  # --set serviceBusConnectionString=$(terraform output -raw servicebus_connection_string)

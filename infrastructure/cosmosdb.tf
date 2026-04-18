@@ -32,5 +32,13 @@ resource "azurerm_cosmosdb_sql_container" "events" {
   resource_group_name = data.azurerm_resource_group.main.name
   account_name        = azurerm_cosmosdb_account.main.name
   database_name       = azurerm_cosmosdb_sql_database.analytics.name
-  partition_key_paths = ["/eventType"]
+  partition_key_paths = ["/resourceType"]
+}
+
+resource "azurerm_cosmosdb_sql_container" "stats" {
+  name                = "stats"
+  resource_group_name = data.azurerm_resource_group.main.name
+  account_name        = azurerm_cosmosdb_account.main.name
+  database_name       = azurerm_cosmosdb_sql_database.analytics.name
+  partition_key_paths = ["/resourceType"]
 }

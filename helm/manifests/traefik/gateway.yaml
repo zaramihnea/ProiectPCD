@@ -7,8 +7,19 @@ spec:
   gatewayClassName: traefik
   listeners:
     - name: web
-      port: 8000
       protocol: HTTP
+      port: 8000
+      allowedRoutes:
+        namespaces:
+          from: All
+    - name: websecure
+      protocol: HTTPS
+      port: 8443
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: wildcard-proiectpcd-online-tls
+            namespace: traefik
       allowedRoutes:
         namespaces:
           from: All

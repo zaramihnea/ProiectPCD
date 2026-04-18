@@ -35,3 +35,13 @@ output "function_app_name" {
   value       = azurerm_linux_function_app.event_processor.name
   description = "Azure Function app name"
 }
+
+output "dns_nameservers" {
+  value       = azurerm_dns_zone.main.name_servers
+  description = "Azure DNS nameservers — point proiectpcd.online registrar to these"
+}
+
+output "kubelet_identity_client_id" {
+  value       = azurerm_kubernetes_cluster.main.kubelet_identity[0].client_id
+  description = "AKS kubelet identity client ID — used by cert-manager for DNS-01"
+}

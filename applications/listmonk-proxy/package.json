@@ -1,0 +1,15 @@
+{
+  "name": "listmonk-proxy",
+  "version": "1.0.0",
+  "description": "Sidecar proxy for Listmonk — intercepts requests and publishes events to Azure Service Bus",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@azure/service-bus": "^7.9.5",
+    "express": "^4.18.2",
+    "http-proxy-middleware": "^2.0.6",
+    "uuid": "^9.0.0"
+  }
+}

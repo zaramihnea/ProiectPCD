@@ -1,0 +1,38 @@
+replicaCount: 1
+
+# Listmonk official image — no custom build needed
+listmonk:
+  image:
+    repository: listmonk/listmonk
+    tag: v4.1.0
+    pullPolicy: IfNotPresent
+
+# Proxy sidecar image — built from applications/listmonk-proxy/ and pushed to ACR
+proxy:
+  image:
+    repository: ""   # e.g. proiectpcdproductionacr.azurecr.io/listmonk-proxy
+    tag: latest
+    pullPolicy: Always
+
+service:
+  type: ClusterIP
+  port: 9000   # proxy port — the only one exposed
+
+# Service Bus — injected at deploy time, never committed
+serviceBusConnectionString: ""
+topicName: "resource-events"
+
+# Listmonk admin credentials
+adminUser: admin
+adminPassword: ""   # injected at deploy time: --set adminPassword=<value>
+adminEmail: "admin@example.com"
+
+postgresql:
+  auth:
+    username: listmonk
+    password: listmonk
+    database: listmonk
+  primary:
+    persistence:
+      storageClass: managed-csi
+      size: 10Gi

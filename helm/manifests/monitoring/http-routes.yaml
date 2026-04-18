@@ -7,9 +7,9 @@ spec:
   parentRefs:
     - name: traefik-gateway
       namespace: traefik
-      sectionName: web
+      sectionName: websecure
   hostnames:
-    - "prometheus.$DOMAIN"
+    - "prometheus.proiectpcd.online"
   rules:
     - backendRefs:
         - name: kube-prometheus-stack-prometheus
@@ -24,9 +24,9 @@ spec:
   parentRefs:
     - name: traefik-gateway
       namespace: traefik
-      sectionName: web
+      sectionName: websecure
   hostnames:
-    - "grafana.$DOMAIN"
+    - "grafana.proiectpcd.online"
   rules:
     - backendRefs:
         - name: kube-prometheus-stack-grafana

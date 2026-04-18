@@ -9,12 +9,6 @@ variable "resource_group_name" {
   default     = "ProiectPCD"
 }
 
-variable "location" {
-  type        = string
-  description = "Azure region"
-  default     = "swedencentral"
-}
-
 variable "project" {
   type        = string
   description = "Project name used for resource naming and tags"
@@ -45,14 +39,8 @@ variable "servicebus_sku" {
   default     = "Standard"
 }
 
-variable "cosmosdb_max_throughput" {
-  type        = number
-  description = "Cosmos DB max autoscale throughput (RU/s)"
-  default     = 1000
-}
-
 variable "websocket_notify_url" {
   type        = string
-  description = "Internal URL of the WebSocket gateway /notify endpoint — populated after AKS deploy"
+  description = "Internal URL of the WebSocket gateway /notify endpoint — set after AKS deploy"
   default     = ""
 }

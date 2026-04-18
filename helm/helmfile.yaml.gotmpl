@@ -7,20 +7,28 @@ environments:
 
 helmDefaults:
   createNamespace: true
-  atomic: true
   wait: true
   timeout: 600
-  cleanupOnFail: true
 
 repositories:
-  - name: bitnami
-    url: https://charts.bitnami.com/bitnami
   - name: prometheus-community
     url: https://prometheus-community.github.io/helm-charts
   - name: traefik
     url: https://helm.traefik.io/traefik
+  - name: jetstack
+    url: https://charts.jetstack.io
 
 releases:
+  - name: cert-manager
+    labels:
+      domain: infra
+      component: cert-manager
+    namespace: cert-manager
+    chart: jetstack/cert-manager
+    version: "~1.16.0"
+    values:
+      - {{ .Values.valuesDir }}/cert-manager/values.yaml
+
   - name: traefik
     labels:
       domain: infra
@@ -47,26 +55,27 @@ releases:
       component: listmonk
     namespace: listmonk
     chart: oci://{{ .Values.acrLoginServer }}/helm/listmonk
-    version: "0.1.0"
+    version: "0.3.0"
     values:
       - {{ .Values.valuesDir }}/listmonk/values.yaml
 
-  - name: websocket-gateway
-    labels:
-      domain: backend
-      component: websocket-gateway
-    namespace: websocket-gateway
-    chart: oci://{{ .Values.acrLoginServer }}/helm/websocket-gateway
-    version: "0.1.0"
-    values:
-      - {{ .Values.valuesDir }}/websocket-gateway/values.yaml
+  # websocket-gateway and frontend — uncomment once charts are pushed to ACR
+  # - name: websocket-gateway
+  #   labels:
+  #     domain: backend
+  #     component: websocket-gateway
+  #   namespace: websocket-gateway
+  #   chart: oci://{{ .Values.acrLoginServer }}/helm/websocket-gateway
+  #   version: "0.1.0"
+  #   values:
+  #     - {{ .Values.valuesDir }}/websocket-gateway/values.yaml
 
-  - name: frontend
-    labels:
-      domain: frontend
-      component: frontend
-    namespace: frontend
-    chart: oci://{{ .Values.acrLoginServer }}/helm/frontend
-    version: "0.1.0"
-    values:
-      - {{ .Values.valuesDir }}/frontend/values.yaml
+  # - name: frontend
+  #   labels:
+  #     domain: frontend
+  #     component: frontend
+  #   namespace: frontend
+  #   chart: oci://{{ .Values.acrLoginServer }}/helm/frontend
+  #   version: "0.1.0"
+  #   values:
+  #     - {{ .Values.valuesDir }}/frontend/values.yaml

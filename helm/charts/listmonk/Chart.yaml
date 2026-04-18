@@ -1,0 +1,7 @@
+apiVersion: v2
+name: listmonk
+description: Listmonk newsletter manager with sidecar proxy for Service Bus event publishing
+type: application
+version: 0.3.0
+appVersion: "v4.1.0"
+dependencies: []

@@ -11,9 +11,16 @@ providers:
   kubernetesGateway:
     enabled: true
 
-# Disable chart-managed Gateway; we create our own (HTTP only) in manifests
+# Disable chart-managed Gateway; we create our own in manifests/traefik/gateway.yaml
 gateway:
   enabled: false
+
+ports:
+  websecure:
+    port: 8443
+    expose:
+      default: true
+    exposedPort: 443
 
 additionalArguments:
   - "--serversTransport.insecureSkipVerify=true"

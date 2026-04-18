@@ -7,9 +7,10 @@ spec:
   parentRefs:
     - name: traefik-gateway
       namespace: traefik
-      sectionName: web
+      sectionName: websecure
   hostnames:
-    - "$DOMAIN"
+    - "proiectpcd.online"
+    - "www.proiectpcd.online"
   rules:
     - matches:
         - path:
