@@ -160,7 +160,7 @@ echo "==> Deploying Azure Function (event-processor)"
 az functionapp config appsettings set \
   --resource-group "$RESOURCE_GROUP" \
   --name "$FUNCTION_APP" \
-  --settings WEBSOCKET_NOTIFY_URL="https://${DOMAIN}/notify"
+  --settings WEBSOCKET_NOTIFY_URL="https://websocket.${DOMAIN}/notify"
 
 cd ../services/event-processor
 npm install --omit=dev
