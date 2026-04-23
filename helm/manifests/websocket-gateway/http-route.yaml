@@ -9,7 +9,7 @@ spec:
       namespace: traefik
       sectionName: websecure
   hostnames:
-    - "proiectpcd.online"
+    - "websocket.proiectpcd.online"
   rules:
     - matches:
         - path:

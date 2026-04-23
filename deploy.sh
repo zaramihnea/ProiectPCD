@@ -34,7 +34,13 @@ docker build --platform linux/amd64 \
   applications/listmonk-proxy/
 docker push "${ACR_NAME}.azurecr.io/listmonk-proxy:latest"
 
-# (websocket-gateway and frontend images will be added here)
+echo "==> Building WebSocket Gateway image"
+docker build --platform linux/amd64 \
+  -t "${ACR_NAME}.azurecr.io/websocket-gateway:latest" \
+  applications/websocket-gateway/
+docker push "${ACR_NAME}.azurecr.io/websocket-gateway:latest"
+
+# (frontend charts will be added here)
 
 # ─── Step 4: Package + push Helm charts to ACR ──────────────────────────────
 echo "==> Packaging and pushing Helm charts"
@@ -44,7 +50,11 @@ LISTMONK_VERSION=$(grep '^version:' "$HELM_DIR/charts/listmonk/Chart.yaml" | awk
 helm package "$HELM_DIR/charts/listmonk" --destination /tmp/helm-charts
 helm push "/tmp/helm-charts/listmonk-${LISTMONK_VERSION}.tgz" "oci://${ACR_NAME}.azurecr.io/helm"
 
-# (websocket-gateway and frontend charts will be added here)
+echo "==> Packaging WebSocket Gateway chart"
+helm package "$HELM_DIR/charts/websocket-gateway" --destination /tmp/helm-charts
+helm push "/tmp/helm-charts/websocket-gateway-0.1.0.tgz" "oci://${ACR_NAME}.azurecr.io/helm"
+
+# (frontend charts will be added here)
 
 # ─── Step 5: Deploy cert-manager ─────────────────────────────────────────────
 echo "==> Deploying cert-manager"
@@ -107,6 +117,8 @@ kubectl apply -f manifests/monitoring/http-routes.yaml
 echo "==> Reading secrets from Terraform"
 cd ../infrastructure
 SB_CONN=$(terraform output -raw servicebus_connection_string)
+COSMOS_ENDPOINT=$(terraform output -raw cosmosdb_endpoint)
+COSMOS_KEY=$(terraform output -raw cosmosdb_primary_key)
 cd ../"$HELM_DIR"
 
 # ─── Step 11: Deploy Listmonk ────────────────────────────────────────────────
@@ -125,8 +137,31 @@ helm upgrade --install listmonk \
 echo "==> Applying Listmonk HTTPRoute"
 kubectl apply -f manifests/listmonk/http-route.yaml
 
+# ─── Step 11.5: Deploy Websocket Gateway ────────────────────────────────────────────────
+echo "==> Deploying WebSocket Gateway"
+helm upgrade --install websocket-gateway \
+  "oci://${ACR_NAME}.azurecr.io/helm/websocket-gateway" \
+  --version "0.1.0" \
+  --namespace websocket-gateway \
+  --create-namespace \
+  --values "environments/azure/values/websocket-gateway/values.yaml" \
+  --set "image.repository=${ACR_NAME}.azurecr.io/websocket-gateway" \
+  --set "cosmosDbEndpoint=${COSMOS_ENDPOINT}" \
+  --set "cosmosDbKey=${COSMOS_KEY}" \
+  --wait \
+  --timeout 300s
+
+echo "==> Applying WebSocket HTTPRoute"
+kubectl apply -f manifests/websocket-gateway/http-route.yaml
+
 # ─── Step 12: Deploy Azure Function ──────────────────────────────────────────
 echo "==> Deploying Azure Function (event-processor)"
+
+az functionapp config appsettings set \
+  --resource-group "$RESOURCE_GROUP" \
+  --name "$FUNCTION_APP" \
+  --settings WEBSOCKET_NOTIFY_URL="https://websocket.${DOMAIN}/notify"
+
 cd ../services/event-processor
 npm install --omit=dev
 zip -r /tmp/event-processor.zip . --exclude "*.git*"
