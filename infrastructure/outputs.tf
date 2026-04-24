@@ -36,6 +36,17 @@ output "function_app_name" {
   description = "Azure Function app name"
 }
 
+output "application_insights_connection_string" {
+  value       = azurerm_application_insights.function.connection_string
+  sensitive   = true
+  description = "Application Insights connection string"
+}
+
+output "log_analytics_workspace_id" {
+  value       = azurerm_log_analytics_workspace.main.id
+  description = "Log Analytics workspace ID"
+}
+
 output "dns_nameservers" {
   value       = azurerm_dns_zone.main.name_servers
   description = "Azure DNS nameservers — point proiectpcd.online registrar to these"

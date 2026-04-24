@@ -18,6 +18,26 @@ resource "azurerm_service_plan" "function" {
   tags = local.tags
 }
 
+resource "azurerm_log_analytics_workspace" "main" {
+  name                = "${local.prefix}-logs"
+  resource_group_name = data.azurerm_resource_group.main.name
+  location            = data.azurerm_resource_group.main.location
+  sku                 = "PerGB2018"
+  retention_in_days   = 30
+
+  tags = local.tags
+}
+
+resource "azurerm_application_insights" "function" {
+  name                = "${local.prefix}-appinsights"
+  resource_group_name = data.azurerm_resource_group.main.name
+  location            = data.azurerm_resource_group.main.location
+  workspace_id        = azurerm_log_analytics_workspace.main.id
+  application_type    = "Node.JS"
+
+  tags = local.tags
+}
+
 resource "azurerm_linux_function_app" "event_processor" {
   name                       = "${local.prefix}-event-processor"
   resource_group_name        = data.azurerm_resource_group.main.name
@@ -30,19 +50,22 @@ resource "azurerm_linux_function_app" "event_processor" {
     application_stack {
       node_version = "20"
     }
+    application_insights_connection_string = azurerm_application_insights.function.connection_string
+    application_insights_key               = azurerm_application_insights.function.instrumentation_key
   }
 
   app_settings = {
-    WEBSITES_RUN_FROM_PACKAGE    = "1"
-    SERVICEBUS_CONNECTION_STRING = azurerm_servicebus_namespace.main.default_primary_connection_string
-    SERVICEBUS_TOPIC             = azurerm_servicebus_topic.resource_events.name
-    SERVICEBUS_SUBSCRIPTION      = azurerm_servicebus_subscription.event_processor.name
-    COSMOS_ENDPOINT              = azurerm_cosmosdb_account.main.endpoint
-    COSMOS_KEY                   = azurerm_cosmosdb_account.main.primary_key
-    COSMOS_DATABASE              = azurerm_cosmosdb_sql_database.analytics.name
-    COSMOS_CONTAINER             = azurerm_cosmosdb_sql_container.events.name
-    # Set after AKS deploy: terraform apply -var websocket_notify_url=http://<LB-IP>/notify
-    WEBSOCKET_NOTIFY_URL         = var.websocket_notify_url
+    WEBSITES_RUN_FROM_PACKAGE              = "1"
+    APPINSIGHTS_INSTRUMENTATIONKEY         = azurerm_application_insights.function.instrumentation_key
+    APPLICATIONINSIGHTS_CONNECTION_STRING  = azurerm_application_insights.function.connection_string
+    SERVICEBUS_CONNECTION_STRING           = azurerm_servicebus_namespace.main.default_primary_connection_string
+    SERVICEBUS_TOPIC                       = azurerm_servicebus_topic.resource_events.name
+    SERVICEBUS_SUBSCRIPTION                = azurerm_servicebus_subscription.event_processor.name
+    COSMOS_ENDPOINT                        = azurerm_cosmosdb_account.main.endpoint
+    COSMOS_KEY                             = azurerm_cosmosdb_account.main.primary_key
+    COSMOS_DATABASE                        = azurerm_cosmosdb_sql_database.analytics.name
+    COSMOS_CONTAINER                       = azurerm_cosmosdb_sql_container.events.name
+    WEBSOCKET_NOTIFY_URL                   = var.websocket_notify_url
   }
 
   tags = local.tags

@@ -1,14 +1,47 @@
-image:
-  repository: "" # fill from: terraform output acr_login_server => <acr>/websocket-gateway
-
-replicaCount: 1
+controllers:
+  main:
+    replicas: 1
+    containers:
+      main:
+        image:
+          repository: proiectpcdproductionacr.azurecr.io/websocket-gateway
+          tag: latest
+          pullPolicy: Always
+        env:
+          PORT: "8080"
+          COSMOS_ENDPOINT: ""
+          COSMOS_KEY: ""
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+        probes:
+          readiness:
+            enabled: true
+            custom: true
+            spec:
+              httpGet:
+                path: /ping
+                port: 8080
+              initialDelaySeconds: 5
+              periodSeconds: 5
+          liveness:
+            enabled: true
+            custom: true
+            spec:
+              httpGet:
+                path: /ping
+                port: 8080
+              initialDelaySeconds: 15
+              periodSeconds: 10
 
 service:
-  type: ClusterIP
-  port: 8080
-
-# Injected at deploy time — never commit real values here
-cosmosDbEndpoint: ""  # from: terraform output cosmosdb_endpoint
-cosmosDbKey: ""       # from: terraform output cosmosdb_primary_key
-serviceBusConnectionString: ""  # from: terraform output servicebus_connection_string
-prometheusUrl: "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090"
+  main:
+    controller: main
+    ports:
+      http:
+        port: 8080
+        protocol: HTTP

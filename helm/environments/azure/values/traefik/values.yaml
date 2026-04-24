@@ -1,3 +1,16 @@
+deployment:
+  kind: DaemonSet
+
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: agentpool
+              operator: In
+              values:
+                - user
+
 service:
   type: LoadBalancer
   annotations:

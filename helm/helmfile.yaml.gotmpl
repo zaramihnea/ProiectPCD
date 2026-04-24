@@ -75,16 +75,15 @@ releases:
     values:
       - {{ .Values.valuesDir }}/listmonk/values.yaml
 
-  # websocket-gateway and frontend — uncomment once charts are pushed to ACR
-  # - name: websocket-gateway
-  #   labels:
-  #     domain: backend
-  #     component: websocket-gateway
-  #   namespace: websocket-gateway
-  #   chart: oci://{{ .Values.acrLoginServer }}/helm/websocket-gateway
-  #   version: "0.1.0"
-  #   values:
-  #     - {{ .Values.valuesDir }}/websocket-gateway/values.yaml
+  - name: websocket-gateway
+    labels:
+      domain: backend
+      component: websocket-gateway
+    namespace: websocket-gateway
+    chart: bjw-s/app-template
+    version: "~4.0"
+    values:
+      - {{ .Values.valuesDir }}/websocket-gateway/values.yaml
 
   # - name: frontend
   #   labels:

@@ -30,8 +30,12 @@ resource "azurerm_kubernetes_cluster_node_pool" "user" {
   name                  = "user"
   kubernetes_cluster_id = azurerm_kubernetes_cluster.main.id
   vm_size               = var.aks_node_size
-  node_count            = var.aks_node_count
   os_disk_size_gb       = 30
+
+  enable_auto_scaling = true
+  min_count           = 2
+  max_count           = 4
+  zones               = ["1", "2"]
 
   tags = local.tags
 }

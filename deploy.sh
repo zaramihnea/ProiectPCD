@@ -10,6 +10,13 @@ FUNCTION_APP="proiectpcd-production-event-processor"
 DOMAIN="proiectpcd.online"
 HELM_DIR="helm"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "$SCRIPT_DIR/.env" ]]; then
+  set -a; source "$SCRIPT_DIR/.env"; set +a
+else
+  echo "==> No .env found, continuing without secrets"
+fi
+
 # ─── Step 1: AKS credentials ────────────────────────────────────────────────
 echo "==> Getting AKS credentials"
 az aks get-credentials \
@@ -27,41 +34,25 @@ helm registry login "${ACR_NAME}.azurecr.io" \
   --username "00000000-0000-0000-0000-000000000000" \
   --password "$ACR_TOKEN"
 
-# ─── Step 3: Build + push custom images to ACR ──────────────────────────────
-echo "==> Building and pushing images"
+# ─── Step 3: Build + push images to ACR ─────────────────────────────────────
+echo "==> Building listmonk-proxy image"
 docker build --platform linux/amd64 \
   -t "${ACR_NAME}.azurecr.io/listmonk-proxy:latest" \
   applications/listmonk-proxy/
 docker push "${ACR_NAME}.azurecr.io/listmonk-proxy:latest"
 
-echo "==> Building WebSocket Gateway image"
+echo "==> Building websocket-gateway image"
 docker build --platform linux/amd64 \
   -t "${ACR_NAME}.azurecr.io/websocket-gateway:latest" \
   applications/websocket-gateway/
 docker push "${ACR_NAME}.azurecr.io/websocket-gateway:latest"
 
-# (frontend charts will be added here)
-
-# ─── Step 4: Package + push Helm charts to ACR ──────────────────────────────
-echo "==> Packaging and pushing Helm charts"
-mkdir -p /tmp/helm-charts
-
-LISTMONK_VERSION=$(grep '^version:' "$HELM_DIR/charts/listmonk/Chart.yaml" | awk '{print $2}')
-helm package "$HELM_DIR/charts/listmonk" --destination /tmp/helm-charts
-helm push "/tmp/helm-charts/listmonk-${LISTMONK_VERSION}.tgz" "oci://${ACR_NAME}.azurecr.io/helm"
-
-echo "==> Packaging WebSocket Gateway chart"
-helm package "$HELM_DIR/charts/websocket-gateway" --destination /tmp/helm-charts
-helm push "/tmp/helm-charts/websocket-gateway-0.1.0.tgz" "oci://${ACR_NAME}.azurecr.io/helm"
-
-# (frontend charts will be added here)
-
-# ─── Step 5: Deploy cert-manager ─────────────────────────────────────────────
+# ─── Step 4: Deploy cert-manager ─────────────────────────────────────────────
 echo "==> Deploying cert-manager"
 cd "$HELM_DIR"
 helmfile -e azure -l component=cert-manager sync
 
-# ─── Step 6: Deploy Traefik ──────────────────────────────────────────────────
+# ─── Step 5: Deploy Traefik ──────────────────────────────────────────────────
 echo "==> Deploying Traefik"
 helmfile -e azure -l component=traefik sync
 
@@ -77,7 +68,7 @@ done
 LB_IP=$(kubectl get svc -n traefik traefik -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 echo "    LoadBalancer IP: $LB_IP"
 
-# ─── Step 7: Update DNS A record ─────────────────────────────────────────────
+# ─── Step 6: Update DNS A record ─────────────────────────────────────────────
 echo "==> Updating DNS wildcard A record: *.${DOMAIN} -> ${LB_IP}"
 az network dns record-set a delete \
   --resource-group "$RESOURCE_GROUP" \
@@ -90,7 +81,7 @@ az network dns record-set a add-record \
   --ipv4-address "$LB_IP" \
   --ttl 60
 
-# ─── Step 8: Apply cert-manager ClusterIssuer + Certificate ──────────────────
+# ─── Step 7: Apply cert-manager ClusterIssuer + Certificate ──────────────────
 echo "==> Applying ClusterIssuer and wildcard Certificate"
 cd ../infrastructure
 KUBELET_CLIENT_ID=$(terraform output -raw kubelet_identity_client_id)
@@ -106,14 +97,14 @@ kubectl wait certificate wildcard-proiectpcd-online \
   --for=condition=Ready \
   --timeout=300s
 
-# ─── Step 9: Monitoring ──────────────────────────────────────────────────────
+# ─── Step 8: Monitoring ──────────────────────────────────────────────────────
 echo "==> Deploying Prometheus stack"
 helmfile -e azure -l component=prometheus sync
 
 echo "==> Applying monitoring HTTPRoutes"
 kubectl apply -f manifests/monitoring/http-routes.yaml
 
-# ─── Step 10: Read Terraform outputs ─────────────────────────────────────────
+# ─── Step 9: Read Terraform outputs ──────────────────────────────────────────
 echo "==> Reading secrets from Terraform"
 cd ../infrastructure
 SB_CONN=$(terraform output -raw servicebus_connection_string)
@@ -121,42 +112,64 @@ COSMOS_ENDPOINT=$(terraform output -raw cosmosdb_endpoint)
 COSMOS_KEY=$(terraform output -raw cosmosdb_primary_key)
 cd ../"$HELM_DIR"
 
-# ─── Step 11: Deploy Listmonk ────────────────────────────────────────────────
+# ─── Step 10: Deploy Listmonk ────────────────────────────────────────────────
 echo "==> Deploying Listmonk"
-helm upgrade --install listmonk \
-  "oci://${ACR_NAME}.azurecr.io/helm/listmonk" \
-  --version "$LISTMONK_VERSION" \
-  --namespace listmonk \
-  --create-namespace \
-  --values "environments/azure/values/listmonk/values.yaml" \
-  --set "serviceBusConnectionString=${SB_CONN}" \
-  --set "adminPassword=admin123" \
-  --wait \
-  --timeout 600s
-
-echo "==> Applying Listmonk HTTPRoute"
+kubectl create namespace listmonk --dry-run=client -o yaml | kubectl apply -f -
+if ! kubectl get secret listmonk-secrets -n listmonk &>/dev/null; then
+  DB_PASSWORD="$(openssl rand -base64 16)"
+else
+  DB_PASSWORD="$(kubectl get secret listmonk-secrets -n listmonk -o jsonpath='{.data.password}' | base64 -d)"
+fi
+SB_CONN="$SB_CONN" DB_PASSWORD="$DB_PASSWORD" envsubst \
+  < manifests/listmonk/secret.yaml | kubectl apply -f -
+helmfile -e azure -l component=listmonk sync
+kubectl apply -f manifests/listmonk/hpa.yaml
 kubectl apply -f manifests/listmonk/http-route.yaml
 
-# ─── Step 11.5: Deploy Websocket Gateway ────────────────────────────────────────────────
-echo "==> Deploying WebSocket Gateway"
-helm upgrade --install websocket-gateway \
-  "oci://${ACR_NAME}.azurecr.io/helm/websocket-gateway" \
-  --version "0.1.0" \
-  --namespace websocket-gateway \
-  --create-namespace \
-  --values "environments/azure/values/websocket-gateway/values.yaml" \
-  --set "image.repository=${ACR_NAME}.azurecr.io/websocket-gateway" \
-  --set "cosmosDbEndpoint=${COSMOS_ENDPOINT}" \
-  --set "cosmosDbKey=${COSMOS_KEY}" \
-  --wait \
-  --timeout 300s
+echo "==> Configuring Listmonk app settings"
+DB_PASSWORD_PG="$(kubectl get secret listmonk-secrets -n listmonk -o jsonpath='{.data.password}' | base64 -d)"
+kubectl exec -n listmonk listmonk-postgresql-0 -- \
+  env PGPASSWORD="$DB_PASSWORD_PG" psql -U listmonk -d listmonk -c \
+  "UPDATE settings SET value = '\"https://listmonk.${DOMAIN}\"' WHERE key = 'app.root_url';"
 
-echo "==> Applying WebSocket HTTPRoute"
+if [[ -n "${GMAIL_APP_PASSWORD:-}" ]]; then
+  echo "==> Configuring Listmonk SMTP (Gmail)"
+  kubectl exec -n listmonk listmonk-postgresql-0 -- \
+    env PGPASSWORD="$DB_PASSWORD_PG" psql -U listmonk -d listmonk -c "
+      UPDATE settings SET value = '[{
+        \"host\": \"smtp.gmail.com\",
+        \"port\": 587,
+        \"enabled\": true,
+        \"password\": \"${GMAIL_APP_PASSWORD}\",
+        \"tls_type\": \"STARTTLS\",
+        \"username\": \"${GMAIL_USER}\",
+        \"max_conns\": 5,
+        \"idle_timeout\": \"15s\",
+        \"wait_timeout\": \"5s\",
+        \"auth_protocol\": \"login\",
+        \"email_headers\": [],
+        \"hello_hostname\": \"\",
+        \"max_msg_retries\": 2,
+        \"tls_skip_verify\": false
+      }]' WHERE key = 'smtp';
+      UPDATE settings SET value = '\"ProiectPCD <${GMAIL_USER}>\"' WHERE key = 'app.from_email';
+    "
+else
+  echo "==> GMAIL_APP_PASSWORD not set, skipping SMTP configuration"
+fi
+
+kubectl rollout restart deployment/listmonk -n listmonk
+kubectl rollout status deployment/listmonk -n listmonk --timeout=120s
+
+# ─── Step 11: Deploy WebSocket Gateway ───────────────────────────────────────
+echo "==> Deploying WebSocket Gateway"
+helmfile -e azure -l component=websocket-gateway sync \
+  --set "controllers.main.containers.main.env.COSMOS_ENDPOINT=${COSMOS_ENDPOINT}" \
+  --set "controllers.main.containers.main.env.COSMOS_KEY=${COSMOS_KEY}"
 kubectl apply -f manifests/websocket-gateway/http-route.yaml
 
 # ─── Step 12: Deploy Azure Function ──────────────────────────────────────────
 echo "==> Deploying Azure Function (event-processor)"
-
 az functionapp config appsettings set \
   --resource-group "$RESOURCE_GROUP" \
   --name "$FUNCTION_APP" \
@@ -180,6 +193,7 @@ echo "=========================================="
 echo "  Deploy complete!"
 echo "=========================================="
 echo "  Listmonk   : https://listmonk.${DOMAIN}"
+echo "  WS Gateway : https://websocket.${DOMAIN}"
 echo "  Prometheus : https://prometheus.${DOMAIN}"
 echo "  Grafana    : https://grafana.${DOMAIN}"
 echo "  Grafana pw : ${GRAFANA_PW}"
