@@ -17,6 +17,10 @@ repositories:
     url: https://helm.traefik.io/traefik
   - name: jetstack
     url: https://charts.jetstack.io
+  - name: bjw-s
+    url: https://bjw-s-labs.github.io/helm-charts
+  - name: bitnami
+    url: https://charts.bitnami.com/bitnami
 
 releases:
   - name: cert-manager
@@ -49,13 +53,25 @@ releases:
     values:
       - {{ .Values.valuesDir }}/prometheus/values.yaml
 
+  - name: listmonk-postgresql
+    labels:
+      domain: backend
+      component: listmonk
+    namespace: listmonk
+    chart: bitnami/postgresql
+    version: "~18.0"
+    values:
+      - {{ .Values.valuesDir }}/listmonk/postgresql-values.yaml
+
   - name: listmonk
     labels:
       domain: backend
       component: listmonk
     namespace: listmonk
-    chart: oci://{{ .Values.acrLoginServer }}/helm/listmonk
-    version: "0.3.0"
+    chart: bjw-s/app-template
+    version: "~4.0"
+    needs:
+      - listmonk/listmonk-postgresql
     values:
       - {{ .Values.valuesDir }}/listmonk/values.yaml
 

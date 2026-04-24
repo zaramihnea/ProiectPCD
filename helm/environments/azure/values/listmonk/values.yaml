@@ -1,29 +1,150 @@
-proxy:
-  image:
-    repository: "proiectpcdproductionacr.azurecr.io/listmonk-proxy"
-    tag: latest
+configMaps:
+  config:
+    data:
+      config.toml: |
+        [app]
+        address = "0.0.0.0:9001"
+        root_url = "https://listmonk.proiectpcd.online"
 
-replicaCount: 1
+        [db]
+        host = "listmonk-postgresql"
+        port = 5432
+        user = "listmonk"
+        password = ""
+        database = "listmonk"
+        ssl_mode = "disable"
+        max_open = 25
+        max_idle = 25
+        max_lifetime = "300s"
 
-affinity:
-  podAntiAffinity:
-    preferredDuringSchedulingIgnoredDuringExecution:
-      - weight: 100
-        podAffinityTerm:
-          labelSelector:
-            matchLabels:
-              app.kubernetes.io/name: listmonk
-          topologyKey: kubernetes.io/hostname
+persistence:
+  config:
+    type: configMap
+    name: listmonk
+    advancedMounts:
+      main:
+        listmonk:
+          - path: /listmonk/config.toml
+            subPath: config.toml
+            readOnly: true
+        listmonk-init:
+          - path: /listmonk/config.toml
+            subPath: config.toml
+            readOnly: true
 
-postgresql:
-  primary:
-    persistence:
-      storageClass: managed-csi
-      size: 10Gi
+controllers:
+  main:
+    initContainers:
+      wait-for-postgres:
+        image:
+          repository: busybox
+          tag: "1.36"
+        command:
+          - sh
+          - -c
+          - |
+            until nc -z listmonk-postgresql 5432; do
+              echo "Waiting for PostgreSQL..."; sleep 2
+            done
+            echo "PostgreSQL ready"
+      listmonk-init:
+        image:
+          repository: listmonk/listmonk
+          tag: v6.1.0
+        command:
+          - sh
+          - -c
+          - |
+            if ! ./listmonk --upgrade --yes 2>&1; then
+              echo "Schema not found, running fresh install..."
+              ./listmonk --install --yes
+              ./listmonk --upgrade --yes
+            fi
+        env:
+          LISTMONK_db__host: listmonk-postgresql
+          LISTMONK_db__port: "5432"
+          LISTMONK_db__user: listmonk
+          LISTMONK_db__database: listmonk
+          LISTMONK_app__root_url: "https://listmonk.proiectpcd.online"
+          LISTMONK_db__password:
+            valueFrom:
+              secretKeyRef:
+                name: listmonk-secrets
+                key: LISTMONK_db__password
 
-adminUser: admin
-adminEmail: "admin@proiectpcd.local"
+    containers:
+      listmonk:
+        image:
+          repository: listmonk/listmonk
+          tag: v6.1.0
+        command: ["./listmonk"]
+        env:
+          LISTMONK_db__host: listmonk-postgresql
+          LISTMONK_db__port: "5432"
+          LISTMONK_db__user: listmonk
+          LISTMONK_db__database: listmonk
+          LISTMONK_app__root_url: "https://listmonk.proiectpcd.online"
+        envFrom:
+          - secretRef:
+              name: listmonk-secrets
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        probes:
+          readiness:
+            enabled: true
+            custom: true
+            spec:
+              tcpSocket:
+                port: 9001
+              initialDelaySeconds: 10
+              periodSeconds: 5
+          liveness:
+            enabled: true
+            custom: true
+            spec:
+              tcpSocket:
+                port: 9001
+              initialDelaySeconds: 30
+              periodSeconds: 10
 
-# Injected at deploy time — never commit real values
-adminPassword: ""        # --set adminPassword=<value>
-serviceBusConnectionString: ""  # --set serviceBusConnectionString=$(terraform output -raw servicebus_connection_string)
+      proxy:
+        image:
+          repository: proiectpcdproductionacr.azurecr.io/listmonk-proxy
+          tag: latest
+          pullPolicy: Always
+        env:
+          PORT: "9000"
+          LISTMONK_URL: "http://localhost:9001"
+          TOPIC_NAME: resource-events
+        envFrom:
+          - secretRef:
+              name: listmonk-secrets
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+        probes:
+          readiness:
+            enabled: true
+            custom: true
+            spec:
+              tcpSocket:
+                port: 9000
+              initialDelaySeconds: 5
+              periodSeconds: 5
+
+service:
+  main:
+    controller: main
+    ports:
+      http:
+        port: 9000
+        protocol: HTTP

@@ -1,0 +1,11 @@
+auth:
+  username: listmonk
+  database: listmonk
+  existingSecret: listmonk-secrets
+  secretKeys:
+    userPasswordKey: password
+
+primary:
+  persistence:
+    storageClass: managed-csi
+    size: 10Gi
