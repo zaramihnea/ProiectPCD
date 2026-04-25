@@ -2,6 +2,22 @@ const express = require("express");
 const { createProxyMiddleware } = require("http-proxy-middleware");
 const { ServiceBusClient } = require("@azure/service-bus");
 const { v4: uuidv4 } = require("uuid");
+const promClient = require("prom-client");
+
+promClient.collectDefaultMetrics();
+
+const httpRequestDuration = new promClient.Histogram({
+  name: "http_request_duration_seconds",
+  help: "HTTP request duration in seconds",
+  labelNames: ["method", "route", "status_code"],
+  buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 5],
+});
+
+const httpRequestsTotal = new promClient.Counter({
+  name: "http_requests_total",
+  help: "Total HTTP requests",
+  labelNames: ["method", "route", "status_code"],
+});
 
 const PORT = parseInt(process.env.PORT || "9000");
 const LISTMONK_URL = process.env.LISTMONK_URL || "http://localhost:9001";
@@ -81,6 +97,23 @@ function eventTypeFromRequest(method, path) {
 }
 
 const app = express();
+
+// Prometheus metrics endpoint — must be before the proxy middleware
+app.get("/metrics", async (req, res) => {
+  res.set("Content-Type", promClient.register.contentType);
+  res.send(await promClient.register.metrics());
+});
+
+// Measure request duration + publish events after Listmonk responds
+app.use((req, res, next) => {
+  const route = TRACKED_ROUTES.find(r => req.path.startsWith(r.prefix))?.prefix || req.path.split("/").slice(0, 3).join("/");
+  const end = httpRequestDuration.startTimer({ method: req.method, route });
+  res.on("finish", () => {
+    end({ status_code: res.statusCode });
+    httpRequestsTotal.inc({ method: req.method, route, status_code: res.statusCode });
+  });
+  next();
+});
 
 // Publish after Listmonk responds so failed requests do not change analytics.
 app.use((req, res, next) => {

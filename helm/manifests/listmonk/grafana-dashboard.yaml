@@ -1,0 +1,240 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: proiectpcd-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  proiectpcd.json: |
+    {
+      "title": "ProiectPCD - Analytics Pipeline",
+      "uid": "proiectpcd-main",
+      "timezone": "browser",
+      "refresh": "10s",
+      "time": { "from": "now-30m", "to": "now" },
+      "panels": [
+        {
+          "id": 1,
+          "title": "Server-Side Request Latency (p50 / p95 / p99)",
+          "type": "timeseries",
+          "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": { "lineWidth": 2 }
+            }
+          },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{job=\"listmonk\"}[2m])) by (le))",
+              "legendFormat": "p50"
+            },
+            {
+              "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"listmonk\"}[2m])) by (le))",
+              "legendFormat": "p95"
+            },
+            {
+              "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job=\"listmonk\"}[2m])) by (le))",
+              "legendFormat": "p99"
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "title": "Request Rate (req/s)",
+          "type": "timeseries",
+          "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "custom": { "lineWidth": 2 }
+            }
+          },
+          "targets": [
+            {
+              "expr": "sum(rate(http_request_duration_seconds_count{job=\"listmonk\"}[2m]))",
+              "legendFormat": "total req/s"
+            },
+            {
+              "expr": "sum(rate(http_request_duration_seconds_count{job=\"listmonk\",status_code=~\"[45]..\"}[2m]))",
+              "legendFormat": "4xx+5xx errors/s"
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "title": "Listmonk Pod Replicas (HPA)",
+          "type": "timeseries",
+          "gridPos": { "x": 0, "y": 8, "w": 8, "h": 7 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": { "lineWidth": 2, "fillOpacity": 10 },
+              "min": 0
+            }
+          },
+          "targets": [
+            {
+              "expr": "kube_deployment_status_replicas_available{namespace=\"listmonk\", deployment=\"listmonk\"}",
+              "legendFormat": "available"
+            },
+            {
+              "expr": "kube_deployment_status_replicas{namespace=\"listmonk\", deployment=\"listmonk\"}",
+              "legendFormat": "desired"
+            }
+          ]
+        },
+        {
+          "id": 4,
+          "title": "Listmonk Proxy CPU Usage",
+          "type": "timeseries",
+          "gridPos": { "x": 8, "y": 8, "w": 8, "h": 7 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "custom": { "lineWidth": 2 }
+            }
+          },
+          "targets": [
+            {
+              "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"listmonk\", container=\"proxy\"}[2m])) by (pod)",
+              "legendFormat": "{{pod}}"
+            }
+          ]
+        },
+        {
+          "id": 5,
+          "title": "Listmonk Proxy Memory",
+          "type": "timeseries",
+          "gridPos": { "x": 16, "y": 8, "w": 8, "h": 7 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes",
+              "custom": { "lineWidth": 2 }
+            }
+          },
+          "targets": [
+            {
+              "expr": "sum(container_memory_working_set_bytes{namespace=\"listmonk\", container=\"proxy\"}) by (pod)",
+              "legendFormat": "{{pod}}"
+            }
+          ]
+        },
+        {
+          "id": 6,
+          "title": "AKS Node Count",
+          "type": "timeseries",
+          "gridPos": { "x": 0, "y": 15, "w": 8, "h": 7 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": { "lineWidth": 2, "fillOpacity": 10 },
+              "min": 0
+            }
+          },
+          "targets": [
+            {
+              "expr": "count(kube_node_info)",
+              "legendFormat": "nodes"
+            }
+          ]
+        },
+        {
+          "id": 7,
+          "title": "Error Rate % (4xx + 5xx)",
+          "type": "stat",
+          "gridPos": { "x": 8, "y": 15, "w": 8, "h": 7 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "thresholds": {
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 0.01 },
+                  { "color": "red", "value": 0.05 }
+                ]
+              }
+            }
+          },
+          "targets": [
+            {
+              "expr": "sum(rate(http_request_duration_seconds_count{job=\"listmonk\",status_code=~\"[45]..\"}[5m])) / sum(rate(http_request_duration_seconds_count{job=\"listmonk\"}[5m]))",
+              "legendFormat": "error rate"
+            }
+          ]
+        },
+        {
+          "id": 8,
+          "title": "p99 Latency (last 5m)",
+          "type": "stat",
+          "gridPos": { "x": 16, "y": 15, "w": 8, "h": 7 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ms",
+              "thresholds": {
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 500 },
+                  { "color": "red", "value": 1000 }
+                ]
+              }
+            }
+          },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job=\"listmonk\"}[5m])) by (le)) * 1000",
+              "legendFormat": "p99"
+            }
+          ]
+        },
+        {
+          "id": 9,
+          "title": "Consistency Window (p50 / p95 / p99)",
+          "type": "timeseries",
+          "gridPos": { "x": 0, "y": 22, "w": 16, "h": 8 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ms",
+              "custom": { "lineWidth": 2 }
+            }
+          },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.50, sum(rate(consistency_window_milliseconds_bucket[5m])) by (le))",
+              "legendFormat": "p50"
+            },
+            {
+              "expr": "histogram_quantile(0.95, sum(rate(consistency_window_milliseconds_bucket[5m])) by (le))",
+              "legendFormat": "p95"
+            },
+            {
+              "expr": "histogram_quantile(0.99, sum(rate(consistency_window_milliseconds_bucket[5m])) by (le))",
+              "legendFormat": "p99"
+            }
+          ]
+        },
+        {
+          "id": 10,
+          "title": "Active WebSocket Connections",
+          "type": "stat",
+          "gridPos": { "x": 16, "y": 22, "w": 8, "h": 8 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "thresholds": {
+                "steps": [
+                  { "color": "blue", "value": null }
+                ]
+              }
+            }
+          },
+          "targets": [
+            {
+              "expr": "websocket_active_connections",
+              "legendFormat": "connections"
+            }
+          ]
+        }
+      ]
+    }

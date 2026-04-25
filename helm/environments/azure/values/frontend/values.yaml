@@ -1,4 +1,43 @@
-image:
-  repository: "" # {{ .Values.acrLoginServer }}/frontend
+controllers:
+  main:
+    replicas: 2
+    containers:
+      main:
+        image:
+          repository: proiectpcdproductionacr.azurecr.io/frontend
+          tag: latest
+          pullPolicy: Always
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+        probes:
+          readiness:
+            enabled: true
+            custom: true
+            spec:
+              httpGet:
+                path: /
+                port: 80
+              initialDelaySeconds: 5
+              periodSeconds: 5
+          liveness:
+            enabled: true
+            custom: true
+            spec:
+              httpGet:
+                path: /
+                port: 80
+              initialDelaySeconds: 15
+              periodSeconds: 10
 
-websocketGatewayUrl: ""
+service:
+  main:
+    controller: main
+    ports:
+      http:
+        port: 80
+        protocol: HTTP

@@ -47,6 +47,12 @@ docker build --platform linux/amd64 \
   applications/websocket-gateway/
 docker push "${ACR_NAME}.azurecr.io/websocket-gateway:latest"
 
+echo "==> Building frontend image"
+docker build --platform linux/amd64 \
+  -t "${ACR_NAME}.azurecr.io/frontend:latest" \
+  applications/frontend/
+docker push "${ACR_NAME}.azurecr.io/frontend:latest"
+
 # ─── Step 4: Deploy cert-manager ─────────────────────────────────────────────
 echo "==> Deploying cert-manager"
 cd "$HELM_DIR"
@@ -69,7 +75,7 @@ LB_IP=$(kubectl get svc -n traefik traefik -o jsonpath='{.status.loadBalancer.in
 echo "    LoadBalancer IP: $LB_IP"
 
 # ─── Step 6: Update DNS A record ─────────────────────────────────────────────
-echo "==> Updating DNS wildcard A record: *.${DOMAIN} -> ${LB_IP}"
+echo "==> Updating DNS A records: *.${DOMAIN} and ${DOMAIN} -> ${LB_IP}"
 az network dns record-set a delete \
   --resource-group "$RESOURCE_GROUP" \
   --zone-name "$DOMAIN" \
@@ -78,6 +84,16 @@ az network dns record-set a add-record \
   --resource-group "$RESOURCE_GROUP" \
   --zone-name "$DOMAIN" \
   --record-set-name "*" \
+  --ipv4-address "$LB_IP" \
+  --ttl 60
+az network dns record-set a delete \
+  --resource-group "$RESOURCE_GROUP" \
+  --zone-name "$DOMAIN" \
+  --name "@" --yes 2>/dev/null || true
+az network dns record-set a add-record \
+  --resource-group "$RESOURCE_GROUP" \
+  --zone-name "$DOMAIN" \
+  --record-set-name "@" \
   --ipv4-address "$LB_IP" \
   --ttl 60
 
@@ -125,6 +141,8 @@ SB_CONN="$SB_CONN" DB_PASSWORD="$DB_PASSWORD" envsubst \
 helmfile -e azure -l component=listmonk sync
 kubectl apply -f manifests/listmonk/hpa.yaml
 kubectl apply -f manifests/listmonk/http-route.yaml
+kubectl apply -f manifests/listmonk/service-monitor.yaml
+kubectl apply -f manifests/listmonk/grafana-dashboard.yaml
 
 echo "==> Configuring Listmonk app settings"
 DB_PASSWORD_PG="$(kubectl get secret listmonk-secrets -n listmonk -o jsonpath='{.data.password}' | base64 -d)"
@@ -163,12 +181,20 @@ kubectl rollout status deployment/listmonk -n listmonk --timeout=120s
 
 # ─── Step 11: Deploy WebSocket Gateway ───────────────────────────────────────
 echo "==> Deploying WebSocket Gateway"
-helmfile -e azure -l component=websocket-gateway sync \
-  --set "controllers.main.containers.main.env.COSMOS_ENDPOINT=${COSMOS_ENDPOINT}" \
-  --set "controllers.main.containers.main.env.COSMOS_KEY=${COSMOS_KEY}"
+kubectl create namespace websocket-gateway --dry-run=client -o yaml | kubectl apply -f -
+COSMOS_ENDPOINT="$COSMOS_ENDPOINT" COSMOS_KEY="$COSMOS_KEY" envsubst \
+  < manifests/websocket-gateway/secret.yaml | kubectl apply -f -
+helmfile -e azure -l component=websocket-gateway sync
 kubectl apply -f manifests/websocket-gateway/http-route.yaml
+kubectl apply -f manifests/websocket-gateway/service-monitor.yaml
 
-# ─── Step 12: Deploy Azure Function ──────────────────────────────────────────
+# ─── Step 12: Deploy Frontend ────────────────────────────────────────────────
+echo "==> Deploying Frontend"
+helmfile -e azure -l component=frontend sync
+kubectl apply -f manifests/frontend/hpa.yaml
+kubectl apply -f manifests/frontend/http-route.yaml
+
+# ─── Step 13: Deploy Azure Function ──────────────────────────────────────────
 echo "==> Deploying Azure Function (event-processor)"
 az functionapp config appsettings set \
   --resource-group "$RESOURCE_GROUP" \

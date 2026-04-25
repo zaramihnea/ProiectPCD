@@ -16,30 +16,34 @@ The platform is deployed entirely on Microsoft Azure, leveraging AKS, Azure Func
 
 The system follows an **event-driven architecture** with clear separation between the *transactional path* (user interacts with Listmonk) and the *analytics path* (events flow through a pipeline to a live dashboard). The two paths are decoupled by Azure Service Bus, which provides durable at-least-once message delivery. To achieve this in a cloud-native Azure environment, we mapped the assignment's architectural requirements to the following specific technologies:
 
-**1. Service A & Event Interception (Listmonk Proxy):**
-To monitor resource usage without modifying Listmonk's core Go/PostgreSQL codebase, we deployed a Node.js proxy on AKS. For each incoming HTTP request, it inspects the path against tracked routes (e.g., `/api/subscribers`, `/api/campaigns`). On a match, it publishes a structured event containing a UUID (`eventId`), resource type, HTTP method and a timestamp. The publish is **fire-and-forget**: if the message broker is unreachable, the request still proxies through to Listmonk. This guarantees that analytics instrumentation can never degrade the availability or latency of the underlying application.
+**1. Kubernetes Cluster (AKS):**
+All long-running services run inside an Azure Kubernetes Service cluster configured with two node pools. A dedicated *system pool* (Standard_D2s_v3) handles Kubernetes control-plane workloads (CoreDNS, metrics-server, kube-proxy). All application workloads are scheduled exclusively on a *user pool* (Standard_B2s_v2, minimum 2 nodes, maximum 4 nodes) spread across two Azure Availability Zones. Pod anti-affinity rules on Listmonk and the WebSocket Gateway ensure that no two replicas of the same service land on the same node, so a single node failure cannot take an entire service offline. A Cluster Autoscaler monitors pending pods and scales the user node pool out (up to 4 nodes) or in (down to 2) automatically.
 
-**2. Message Broker (Azure Service Bus):**
+**2. Ingress & TLS Termination (Traefik):**
+All inbound traffic enters the cluster through **Traefik**, deployed as a DaemonSet on the user node pool and exposed via an Azure Load Balancer. Traefik implements the Kubernetes Gateway API and acts as the single TLS termination point for the custom domain (`proiectpcd.online`), using certificates automatically provisioned by cert-manager from Let's Encrypt. Routing decisions are driven by `HTTPRoute` resources: requests to `listmonk.proiectpcd.online` are forwarded to the Listmonk Proxy service, requests to `websocket.proiectpcd.online` are forwarded to the WebSocket Gateway, and the apex domain serves the Analytics Dashboard. Traefik also handles the HTTP→HTTPS redirect and transparently proxies WebSocket upgrade requests to the Gateway.
+
+**3. Service A & Event Interception (Listmonk Proxy):**
+Listmonk and its proxy run as two containers inside the **same Kubernetes pod**, following the *Sidecar* pattern. Listmonk (Go/PostgreSQL) binds on port 9001 and is never exposed externally; the proxy container listens on port 9000 and is the only surface reachable through Traefik. PostgreSQL runs as a separate `StatefulSet` pod with a dedicated PersistentVolumeClaim backed by an Azure Disk, guaranteeing data durability independent of the application pod lifecycle.
+
+To monitor resource usage without modifying Listmonk's core codebase, the proxy inspects every incoming HTTP request against tracked routes (e.g., `/api/subscribers`, `/api/campaigns`). On a match, it publishes a structured event containing a UUID (`eventId`), resource type, HTTP method and a timestamp. The publish is **fire-and-forget**: if the message broker is unreachable, the request still proxies through to Listmonk. This guarantees that analytics instrumentation can never degrade the availability or latency of the underlying application.
+
+**4. Message Broker (Azure Service Bus):**
 It acts as the asynchronous buffer between the proxy and the analytics engine. By receiving events on the `resource-events` topic, it absorbs sudden traffic spikes, ensuring the analytics pipeline processes data at its own pace without exerting backpressure on the main proxy.
 
-**3. FaaS Event Processor (Azure Function):**
+**5. FaaS Event Processor (Azure Function):**
 A serverless Node.js function triggered by the Service Bus. For each message, it performs three operations:
 
 * **Idempotent Storage:** Upserts the raw event into Cosmos DB using the `eventId` as the document identifier. Because the Service Bus guarantees "at-least-once" delivery, duplicate messages safely overwrite identical data without causing duplicate statistics.
 * **Aggregation:** Reads the current aggregate document, increments the relevant counter (`totalAccesses`, `totalCreated`, etc.), and writes it back.
 * **Notification:** Issues a best-effort HTTP POST to the WebSocket Gateway's `/notify` endpoint with a strict three-second timeout, ensuring a slow gateway cannot starve the function's execution thread.
 
-**4. Stateful Database (Azure Cosmos DB):**
+**6. Stateful Database (Azure Cosmos DB):**
 A serverless NoSQL datastore that acts as the single source of truth, persisting both the raw event logs (in the `events` container) and the aggregated statistics (in the `stats` container).
 
-**5. WebSocket Gateway & Dashboard (AKS):**
-The WebSocket Gateway exposes `/ws` for client connections and `/notify` for the Event Processor. Upon a new client connection, it queries Cosmos DB for the `initial_state` and pushes it to the client, subsequently broadcasting live `/notify` payloads. The gateway is stateless regarding durable data, but stateful regarding live WebSocket connections. The frontend is a static browser client that renders the statistics and implements a reconnection strategy to recover from network drops.
+**7. WebSocket Gateway & Dashboard (AKS):**
+The WebSocket Gateway exposes `/ws` for client connections and `/notify` for the Event Processor. Upon a new client connection, it queries Cosmos DB for the `initial_state` and pushes it to the client, subsequently broadcasting live `/notify` payloads. The gateway is stateless regarding durable data, but stateful regarding live WebSocket connections. The frontend is a static React application served by nginx, deployed on AKS, that renders the statistics and implements a reconnection strategy to recover from network drops.
 
-!!!!!
-
-!!!!![FA MIHNEA O DIAGRAMA CU APLICATIA (INSPIRATA DUPA AIA DIN ASSIGNMENT PDF)]
-
-!!!!!
+![System Architecture Diagram](pcd-infra-arhitecture-2.png)
 
 ![resources](resources.png)
 
@@ -58,13 +62,14 @@ To ensure a reproducible, production-grade environment, the entire cloud footpri
 
 | # | Interaction | Style | Protocol | Justification |
 | --- | --- | --- | --- | --- |
-| 1 | Browser → Proxy | Sync | HTTP/1.1 | The user is waiting; request–response semantics are required. |
-| 2 | Proxy → Listmonk | Sync | HTTP/1.1 | Listmonk is the authoritative source of truth; the response must be returned to the user. |
-| 3 | Proxy → Service Bus | **Async** (fire-and-forget) | AMQP 1.0 | Decouples analytics from user latency. A failed publish costs analytics, never a user request. |
-| 4 | Service Bus → Function | **Async** (broker-managed pull) | AMQP 1.0 | Function processes at its own rate. Backpressure is naturally handled by queue depth; the Consumption plan auto-scales against it. |
-| 5 | Function → Cosmos DB | Sync (within invocation) | HTTPS / REST | The function must confirm the write before acking the Service Bus message; otherwise a crash mid-write followed by redelivery would silently drop data. |
-| 6 | Function → WebSocket Gateway | **Async** from the business flow, sync within the call, 3 s timeout | HTTP/1.1 | A failed notify only delays the dashboard; durable state is already in Cosmos DB. The timeout prevents a slow gateway from back-pressuring the function. |
-| 7 | Gateway → Client | **Async** push | WebSocket | The server initiates the send; polling would waste bandwidth and add latency. One long-lived connection serves arbitrarily many pushes. |
+| 1 | Browser → Traefik | Sync | HTTPS (TLS termination) | Single entry point for all external traffic; terminates TLS and routes by `Host` header. |
+| 2 | Traefik → Proxy / Gateway / Frontend | Sync | HTTP/1.1 | Traefik forwards the decrypted request to the appropriate backend service inside the cluster. WebSocket upgrade requests are transparently proxied. |
+| 3 | Proxy → Listmonk | Sync | HTTP/1.1 | Listmonk is the authoritative source of truth; the response must be returned to the user. |
+| 4 | Proxy → Service Bus | **Async** (fire-and-forget) | AMQP 1.0 | Decouples analytics from user latency. A failed publish costs analytics, never a user request. |
+| 5 | Service Bus → Function | **Async** (broker-managed pull) | AMQP 1.0 | Function processes at its own rate. Backpressure is naturally handled by queue depth; the Consumption plan auto-scales against it. |
+| 6 | Function → Cosmos DB | Sync (within invocation) | HTTPS / REST | The function must confirm the write before acking the Service Bus message; otherwise a crash mid-write followed by redelivery would silently drop data. |
+| 7 | Function → WebSocket Gateway | **Async** from the business flow, sync within the call, 3 s timeout | HTTP/1.1 | A failed notify only delays the dashboard; durable state is already in Cosmos DB. The timeout prevents a slow gateway from back-pressuring the function. |
+| 8 | Gateway → Client | **Async** push | WebSocket | The server initiates the send; polling would waste bandwidth and add latency. One long-lived connection serves arbitrarily many pushes. |
 
 The pattern is that **synchronous calls are used only when the caller truly needs a response**; all other interactions are asynchronous, insulated by either a message bus or a timeout. This keeps latency low on the user-facing path and lets each tier scale independently.
 
@@ -92,11 +97,13 @@ Service Bus guarantees **at-least-once** delivery: the Function may see the same
     * **(a) Pre-check the events container.** Read `events/{eventId}`; if it already exists with a `processedAt` field, skip the aggregate update.
     * **(b) Cosmos DB stored procedure.** Wrap steps 1 and 2 in a transactional JavaScript stored procedure whose atomicity is guaranteed within a single partition.
 
-### 4.4 Consistency Window - idk this is mihnea s thing
+### 4.4 Consistency Window
 
-The *consistency window* — the time between a user action and its reflection on the dashboard — is the sum of: proxy publish latency, Service Bus enqueue-to-deliver time, Function cold-start (if any) or warm-invocation time, Cosmos DB write round-trip, HTTP POST to Gateway, and WebSocket broadcast. We measure this window empirically in Section 5.
+The *consistency window* — the time between a user action and its reflection on the dashboard — is the sum of: proxy publish latency, Service Bus enqueue-to-deliver time, Function cold-start (if any) or warm-invocation time, Cosmos DB write round-trip, HTTP POST to Gateway, and WebSocket broadcast. We measure this window empirically by recording a `lastEventAt` timestamp at the proxy on every publish and computing `receivedAt − lastEventAt` at the WebSocket Gateway `/notify` endpoint, where `receivedAt` is the wall-clock time the notification arrives from the Function.
 
-> **[FIGURE 3 — placeholder]** Histogram of end-to-end consistency-window measurements across N events under steady 50 RPS load; note the bimodal distribution corresponding to warm vs. cold function invocations.
+Measured under steady traffic, the consistency window was bimodal: warm Function invocations completed the full pipeline in **89–165 ms** (p50 ≈ 100 ms, p95 ≈ 200 ms), while the first invocation after a cold-start spike reached **~16 s**. This cold-start outlier corresponds to the Azure Function Consumption plan provisioning a new instance, which confirms the analysis in Section 5.3.
+
+![Consistency Window — p50/p95/p99 under steady load](images/consystency-window.jpg)
 
 ---
 
@@ -116,7 +123,7 @@ We measure:
 
 > **[FIGURE 4 — placeholder]** k6 test configuration (ramp stages, VU counts, target RPS) and the script used to drive it.
 
-### 5.2 End-to-End Latency - mihnea?
+### 5.2 End-to-End Latency
 
 Under a baseline of 50 RPS on the proxy, client-side latency is dominated by the round-trip to Listmonk; analytics instrumentation contributes negligible additional overhead because event publishing is fire-and-forget and runs concurrently with the upstream request.
 
@@ -137,10 +144,17 @@ The Consumption plan scales the function horizontally according to the Service B
 
 ### 5.4 Scaling Behaviour
 
-* **Listmonk Proxy** — scales horizontally on AKS with an HPA on CPU. Stateless; no sticky sessions required.
+* **Listmonk Proxy & Frontend** — both scale horizontally on AKS via a `HorizontalPodAutoscaler` (CPU target: 70%, min: 2, max: 4 replicas). Both tiers are stateless, so no sticky sessions are required. During our load test, the Listmonk deployment scaled from 2 to 3 replicas within approximately two minutes as CPU crossed the threshold.
+* **AKS Cluster Autoscaler** — when pending pods cannot be scheduled due to insufficient node capacity, the Cluster Autoscaler provisions additional Standard_B2s_v2 nodes (up to 4) in the user pool across the two configured Availability Zones. Node scale-in is triggered after ten minutes of sustained under-utilisation, subject to pod disruption constraints.
 * **Azure Function** — auto-scales from 0 to 200 instances on the Consumption plan, driven by a queue-length heuristic in the Service Bus scale controller. Scale-out is not instantaneous; cold starts add observable tail latency.
 * **Cosmos DB serverless** — scales RU capacity automatically but is capped at 5,000 RU/s per container. Beyond this ceiling the provisioned or autoscale mode becomes necessary; partition-key design (`/resourceType`) ensures writes distribute across physical partitions.
-* **WebSocket Gateway** — the hardest tier to scale: a given client's connection terminates at one pod, so scaling out requires either (a) sticky-session load balancing, or (b) a pub/sub fan-out between gateway replicas so that a `/notify` POST to any pod reaches clients attached to every pod. The current implementation scales to a single replica.
+* **WebSocket Gateway** — the hardest tier to scale: a given client's connection terminates at one pod, so scaling out requires either (a) sticky-session load balancing, or (b) a pub/sub fan-out between gateway replicas so that a `/notify` POST to any pod reaches clients attached to every pod. The current implementation intentionally runs at a single replica; horizontal scaling of the gateway is identified as future work.
+
+The Grafana panels below capture the HPA scale-out event in real time — replica count rising from 2 to 4 alongside CPU saturation and the resulting latency profile — and the Kubernetes workload recovery view showing pods returning to `Running` after the scale event.
+
+![HPA scale-out — replicas, CPU, memory and latency under load](images/latency+replicas+cpu+mem-under-load.jpg)
+
+![Self-healing and auto-scaling — Kubernetes workload recovery](images/self-healing&auto-scaling.jpg)
 
 ---
 
@@ -152,11 +166,27 @@ The client implements **exponential-backoff reconnection** (1 s → 2 s → 4 s 
 
 ### 6.2 Built-in Recovery Mechanisms
 
+* **Kubernetes self-healing** — every application workload runs as a `Deployment`. If a pod crashes or fails its liveness probe, the Kubernetes controller manager immediately schedules a replacement on a healthy node. The desired replica count is continuously reconciled; the system converges back to the declared state without operator intervention. We observed this behaviour directly during load testing: the PostgreSQL pod was OOMKilled by the Linux kernel when memory pressure on the node spiked, entered `CrashLoopBackOff`, and was automatically restarted and restored to `Running` within approximately 90 seconds — with no operator intervention.
+
+![PostgreSQL OOMKill and automatic self-healing recovery](images/postgres-self-healingOOM.jpg)
+
+![Kubernetes workload view — pods returning to Running after OOMKill](images/self-healing&auto-scaling.jpg)
+
 * **At-least-once delivery + idempotent storage** — messages survive transient consumer failures without manual intervention.
 * **Dead-letter subscription** — permanent "poison" messages are isolated after ten failures so they do not block the subscription.
 * **Timeouts on fire-and-forget calls** — prevent a slow dependency from cascading into latency on the critical path.
 * **Stateless front tiers** — proxy and gateway pods can be replaced or restarted with no data loss.
 * **Declarative infrastructure** — the entire environment is reproducible from Terraform + Helmfile; recovery from catastrophic data-plane loss is bounded by the time to `terraform apply && helmfile sync`.
+
+### 6.3 Infrastructure Resilience
+
+The underlying infrastructure is designed to tolerate both node-level and zone-level failures:
+
+* **Availability Zone distribution** — the AKS user node pool spans two Azure Availability Zones (1 and 2). Each zone is a physically separate datacenter with independent power, cooling and networking. A complete zone outage removes at most half the nodes, but because pod anti-affinity distributes replicas across zones, every service retains at least one healthy pod.
+* **Pod anti-affinity** — `requiredDuringSchedulingIgnoredDuringExecution` anti-affinity rules on Listmonk and the WebSocket Gateway prevent co-location of replicas on the same node. Combined with the multi-zone node pool, this means a single hardware failure cannot take an entire service offline.
+* **Node autoscaling across zones** — the Cluster Autoscaler provisions replacement or additional nodes across both zones (up to 4 total). New nodes satisfy pending pod scheduling requests within minutes, restoring full capacity automatically.
+* **Persistent data protection** — PostgreSQL and Cosmos DB data is protected at the storage layer. The PostgreSQL PVC is backed by an Azure Managed Disk with `prevent_destroy = true` in Terraform, ensuring it survives cluster teardown and rebuild. Cosmos DB is similarly protected and replicates data within the Azure region.
+* **Automatic TLS renewal** — cert-manager continuously monitors certificate expiry and renews Let's Encrypt certificates before they lapse, eliminating a class of availability failures caused by expired TLS.
 
 ---
 

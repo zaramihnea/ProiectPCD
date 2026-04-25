@@ -9,8 +9,9 @@ controllers:
           pullPolicy: Always
         env:
           PORT: "8080"
-          COSMOS_ENDPOINT: ""
-          COSMOS_KEY: ""
+        envFrom:
+          - secretRef:
+              name: websocket-gateway-secrets
         resources:
           requests:
             cpu: 100m

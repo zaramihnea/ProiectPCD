@@ -1,0 +1,15 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: websocket-gateway
+  namespace: websocket-gateway
+  labels:
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: websocket-gateway
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s

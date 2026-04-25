@@ -9,6 +9,7 @@
   "dependencies": {
     "@azure/cosmos": "^4.1.1",
     "express": "^4.18.2",
+    "prom-client": "^15.1.3",
     "ws": "^8.16.0"
   }
 }

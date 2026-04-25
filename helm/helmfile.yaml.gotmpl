@@ -85,12 +85,12 @@ releases:
     values:
       - {{ .Values.valuesDir }}/websocket-gateway/values.yaml
 
-  # - name: frontend
-  #   labels:
-  #     domain: frontend
-  #     component: frontend
-  #   namespace: frontend
-  #   chart: oci://{{ .Values.acrLoginServer }}/helm/frontend
-  #   version: "0.1.0"
-  #   values:
-  #     - {{ .Values.valuesDir }}/frontend/values.yaml
+  - name: frontend
+    labels:
+      domain: frontend
+      component: frontend
+    namespace: frontend
+    chart: bjw-s/app-template
+    version: "~4.0"
+    values:
+      - {{ .Values.valuesDir }}/frontend/values.yaml
