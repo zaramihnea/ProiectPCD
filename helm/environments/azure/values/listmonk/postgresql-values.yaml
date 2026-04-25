@@ -9,3 +9,17 @@ primary:
   persistence:
     storageClass: managed-csi
     size: 10Gi
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 768Mi
+
+  extendedConfiguration: |
+    max_connections = 50
+    shared_buffers = 128MB
+    work_mem = 4MB
+    maintenance_work_mem = 64MB
