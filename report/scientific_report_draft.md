@@ -111,36 +111,83 @@ Measured under steady traffic, the consistency window was bimodal: warm Function
 
 ### 5.1 Load Testing Methodology
 
-We used **Grafana k6** to drive load against the public endpoint of the Listmonk Proxy. The test profile sweeps through four stages — 10, 50, 100, and 500 virtual users — each sustained for five minutes, with a one-minute ramp between stages. Each VU issues `GET /api/subscribers/{randomId}` requests in a tight loop, representing the most common read path on a newsletter manager in production.
+We used **Grafana k6** to drive load against the public endpoint of the Listmonk Proxy. The test profile was designed to sweep through escalating stages of concurrent virtual users (VUs) (10, 50, 100, and 200 VUs) each sustained for a period of five minutes, with a one-minute ramp between stages. During the test execution, each VU continuously issued authenticated `GET /api/subscribers` requests in a loop, simulating a heavy read-centric traffic pattern typical for a newsletter manager dashboard in production.
 
-We measure:
+```
+█ TOTAL RESULTS 
 
-* **Client-side HTTP latency** (percentiles p50, p95, p99) reported by k6.
-* **Azure Function invocations per minute, average execution duration, and maximum concurrent instances** from Application Insights.
-* **Service Bus active-message count and incoming/outgoing messages per second** from Azure Monitor.
-* **Cosmos DB Request Units (RU) consumed per second** from the Cosmos metrics blade.
-* **End-to-end consistency window**, measured by tagging each proxy publish with a timestamp and matching it against the arrival timestamp of the corresponding `stats_updated` message on a dedicated dashboard client, correlated by `eventId`.
+    checks_total...................: 134419  87.907237/s
+    checks_succeeded...............: 89.14%  119826 out of 134419
+    checks_failed..................: 10.85%  14593 out of 134419
 
-> **[FIGURE 4 — placeholder]** k6 test configuration (ramp stages, VU counts, target RPS) and the script used to drive it.
+    status is 200
+      ↳  89% — ✓ 119826 / ✗ 14593
+
+    HTTP
+    http_req_duration..............: avg=861.99ms min=51.18ms  med=118.49ms max=1m0s   p(90)=1.53s   p(95)=2.81s
+      { expected_response:true }...: avg=386.68ms min=51.18ms  med=108.46ms max=27.35s p(90)=609.2ms p(95)=1.76s
+    http_req_failed................: 10.85%       14593 out of 134419
+    http_reqs......................: 134419       87.907237/s
+
+    EXECUTION
+    iteration_duration.............: avg=962.59ms min=151.41ms med=219.03ms max=1m0s   p(90)=1.63s   p(95)=2.91s
+    iterations.....................: 134419       87.907237/s
+    vus............................: 1            min=1                     max=200
+    vus_max........................: 200          min=200                   max=200
+
+    NETWORK
+    data_received..................: 488 MB       319 kB/s
+    data_sent......................: 7.6 MB       5.0 kB/s
+```
+
+Service bus requests
+
+![servicebus](servicebusrequests.png)
+
+Requests to Cosmos
+
+![totalrequestscosmosdb](cosmosrequests.png)
 
 ### 5.2 End-to-End Latency
 
-Under a baseline of 50 RPS on the proxy, client-side latency is dominated by the round-trip to Listmonk; analytics instrumentation contributes negligible additional overhead because event publishing is fire-and-forget and runs concurrently with the upstream request.
+This section measures the End-to-End (E2E) latency of the system. The goal is to find out exactly how long it takes for a request to travel through the entire asynchronous pipeline (Proxy → Azure Service Bus → Azure Function → Cosmos DB) and send a live update back to the client via WebSockets.
 
-> **[FIGURE 5 — placeholder]** k6 HTTP latency percentiles (p50 / p95 / p99) across the four load stages.
-> **[TABLE 2 — placeholder]** Summary of p50/p95/p99 latencies at each stage, alongside the requests-per-second actually achieved and the error rate.
+To measure this, we ran a k6 script for 3 minutes that sends an HTTP request every 3 seconds. To get an exact latency measurement without worrying about out-of-sync server clocks, the script works purely locally: it records a timestamp right before sending the HTTP request, waits, and then compares it to the timestamp when the WebSocket confirmation (`stats_updated`) arrives. 
 
-### 5.3 Azure Function Throughput Under Variable Load
+The results show that the system is fast:
 
-The Consumption plan scales the function horizontally according to the Service Bus queue depth. We observe three distinct regimes:
+* **Initial HTTP Response:** The synchronous API returns a response to the user with a median latency (p50) of **61.82 ms**.
+* **Full Pipeline (E2E):** The entire background process completes and sends the WebSocket message back to the client with a median latency of **153 ms** (and 95% of requests finish under **208 ms**).
 
-1. **Sub-saturation (≤ *N* RPS)** — a single function instance keeps up; queue depth stays near zero; end-to-end consistency window is bounded by the function's execution time plus the notify RTT.
-2. **Auto-scale regime (*N* to *M* RPS)** — queue depth spikes, the Functions runtime provisions additional instances, and after a brief lag the system reaches a new steady state with queue depth near zero again.
-3. **Saturation / cold-start-dominated (> *M* RPS)** — new-instance cold starts become visible as elevated p99 latency on the end-to-end consistency window even though p50 remains stable. This is the expected fingerprint of a Consumption-plan Function under sharp load changes.
+This means the asynchronous background processing (Service Bus + Azure Function) only adds about 90 milliseconds of actual delay. To a user, the live dashboard updates feel instantaneous, proving the decoupled architecture works without adding noticeable lag.
 
-> **[FIGURE 6 — placeholder]** Function invocations per minute and active instance count versus offered load.
-> **[FIGURE 7 — placeholder]** Service Bus active-message count over time; visible spike-and-drain on each load-stage transition.
-> **[FIGURE 8 — placeholder]** Function execution duration percentiles; note the cold-start outliers at p99.
+![e2e](e2e.png)
+
+### 5.3 Azure Function Throughput and Auto-Scaling
+
+Because the Azure Function runs on a serverless Consumption plan, it automatically scales out based on how many messages are waiting in the Service Bus queue. The load test data clearly captured this scaling lifecycle.
+
+**Throughput and Scaling**
+When the proxy flooded the Service Bus with load, the Azure Function successfully spun up to handle it, reaching a peak throughput of **34.31k requests** during the heaviest phase of the test. 
+
+**Cold Starts and Response Times**
+Serverless scaling is not instant. When the massive wave of messages first hit, Azure had to provision new instances. This "cold start" period is visible as a sharp spike in average server response time (peaking around 1.8 seconds). Once the new instances were warm and running, the response time dropped back down to a steady state. During the absolute peak of the load, the function did drop about 4.05k requests, indicating the upper limit of the scaling configuration before saturation.
+
+**Execution Duration Distribution**
+The distribution of execution times perfectly illustrates the difference between warm and cold executions:
+* **The "Warm" Cluster:** The large spike on the left side of the histogram shows that the vast majority of executions are fast, completing in around **210 ms** once the function is fully scaled.
+* **The "Cold" Tail:** The long tail stretching to the right shows the penalty of cold starts and queue buildup. The 50th percentile is dragged to the right, and the 99th percentile stretches out to **11 seconds**. These represent the messages that were waiting in the queue while Azure was busy spinning up new servers.
+
+Ultimately, the function successfully absorbed and processed the massive spike in traffic, acting as a reliable shock absorber for the database.
+
+Response time Azure Function App
+
+![responsetime](responsetime.png)
+
+Distribution
+
+![distribution](distribution.png)
+
 
 ### 5.4 Scaling Behaviour
 
