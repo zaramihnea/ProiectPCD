@@ -53,7 +53,7 @@ az group create --name ProiectPCD --location northeurope
 
 ## Step 3 — Configure Terraform
 
-Create `infrastructure/terraform.tfvars` (this file is gitignored):
+Create `infrastructure/terraform.tfvars` (this file is gitignored, you have an example in `infrastructure/terraform.tfvars.example`) with your Azure subscription ID:
 
 ```hcl
 subscription_id = "<your-azure-subscription-id>"
@@ -80,7 +80,7 @@ Terraform provisions: AKS cluster, ACR, Azure Service Bus, Cosmos DB (serverless
 
 ## Step 4 — Create the `.env` file (optional — SMTP only)
 
-`deploy.sh` sources `.env` from the repo root if it exists. SMTP configuration is optional; without it the app runs fine but Listmonk cannot send emails.
+`deploy.sh` sources `.env` from the repo root if it exists (you have an example in /.env.example). SMTP configuration is optional; without it the app runs fine but Listmonk cannot send emails.
 
 ```bash
 # .env (repo root, gitignored)
