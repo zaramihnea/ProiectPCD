@@ -250,7 +250,6 @@ Netflix’s Keystone pipeline operates at a scale of over a trillion events per 
 ## 7.3 Key Differences at Scale
 A fundamental difference lies in the storage model: while our current Service Bus removes messages upon a successful acknowledgment, Netflix’s Kafka infrastructure provides a partitioned, replayable log [S1]. This allows Netflix to re-process historical data in case of a downstream bug, a level of resilience beyond our current scope. Additionally, while our project uses a WebSocket Gateway to push live updates to a dashboard, Netflix uses a complex architecture to serve diverse internal services, from billing to content recommendation engines [S1].
 
-References
 [S1] Keystone Real-time Stream Processing Platform (Netflix Technology Blog): https://netflixtechblog.com/keystone-real-time-stream-processing-platform-a3ee651812a
 
 [S2] Evolution of the Netflix Data Pipeline (Netflix Technology Blog): https://netflixtechblog.com/evolution-of-the-netflix-data-pipeline-da246ca36905
