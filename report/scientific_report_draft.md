@@ -1,6 +1,6 @@
 # Real-Time Analytics Dashboard: A distributed system for event driven resource access monitoring
 
-**Team members:** Zara Mihnea-Tudor, Roman Iulian, Mihoc Roxana-Gabriela
+**Team members:** Mihoc Roxana-Gabriela, Roman Iulian, Zara Mihnea-Tudor
 
 **Repository:** [https://github.com/zaramihnea/ProiectPCD](https://github.com/zaramihnea/ProiectPCD)
 
@@ -241,13 +241,13 @@ The underlying infrastructure is designed to tolerate both node-level and zone-l
 ## 7. Comparison with Real-World Systems - Netflix Keystone Pipeline
 The architecture implemented in this project reflects high-scale patterns used by global platforms to handle massive data streams. A primary example is Netflix, which utilizes a system known as the Keystone Pipeline for its unified event-driven platform.
 
-## 7.1 Architectural Parallels
+### 7.1 Architectural Parallels
 Much like our design, where Service A (Listmonk) is decoupled from the analytics pipeline via Azure Service Bus, Netflix utilizes Apache Kafka to separate producers from consumers [S1]. In our system, the Service Bus absorbs traffic spikes and ensures that analytics processing does not exert backpressure on the main proxy. This mirrors Netflix’s commitment to ensuring that data ingestion never degrades the performance of the users [S1]. Our Azure Function acts as a serverless event processor, but Netflix has dedicated stream processing jobs like Apache Samza and later Apache Flink which consume from the log and emit to real-time stores [S2].
 
-## 7.2 Data Consistency and Storage
+### 7.2 Data Consistency and Storage
 Netflix’s Keystone pipeline operates at a scale of over a trillion events per day and prioritizes high availability, aligning with the AP (Availability and Partition-tolerance) model of the CAP theorem. Similarly, we adopted an AP model for our analytics use case, accepting that the dashboard is eventually consistent with the true state of the application. For storage, we used Azure Cosmos DB with Session consistency to balance performance and accuracy. This approach is comparable to Netflix’s use of distributed NoSQL stores (like Cassandra) to provide high-speed writes for real-time telemetry without the overhead of strong global consistency [S2].
 
-## 7.3 Key Differences at Scale
+### 7.3 Key Differences at Scale
 A fundamental difference lies in the storage model: while our current Service Bus removes messages upon a successful acknowledgment, Netflix’s Kafka infrastructure provides a partitioned, replayable log [S1]. This allows Netflix to re-process historical data in case of a downstream bug, a level of resilience beyond our current scope. Additionally, while our project uses a WebSocket Gateway to push live updates to a dashboard, Netflix uses a complex architecture to serve diverse internal services, from billing to content recommendation engines [S1].
 
 [S1] Keystone Real-time Stream Processing Platform (Netflix Technology Blog): https://netflixtechblog.com/keystone-real-time-stream-processing-platform-a3ee651812a
@@ -256,7 +256,7 @@ A fundamental difference lies in the storage model: while our current Service Bu
 
 ---
 
-## 8 Use of AI Tools
+## 8. Use of AI Tools
 
 The following AI tools were used during this project:
 

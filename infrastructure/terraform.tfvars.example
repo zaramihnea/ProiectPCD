@@ -1,0 +1,6 @@
+subscription_id     = "<<your subscription_id>>"
+resource_group_name = "ProiectPCD"
+project             = "proiectpcd"
+environment         = "production"
+aks_node_count      = 2
+aks_node_size       = "Standard_B2s_v2"
