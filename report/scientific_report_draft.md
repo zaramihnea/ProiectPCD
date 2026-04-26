@@ -207,9 +207,10 @@ The Grafana panels below capture the HPA scale-out event in real time — replic
 
 ## 6. Resilience
 
-### 6.1 WebSocket Reconnection - roxana
+### 6.1 WebSocket Reconnection
 
-The client implements **exponential-backoff reconnection** (1 s → 2 s → 4 s → …, capped at 30 s, with jitter to avoid thundering-herd at recovery). On successful reconnect, the server sends `initial_state` from Cosmos DB, so the client is *state-correct* but not *event-complete*: it will not receive push notifications for events that occurred during the outage, only their aggregated effect. For an analytics dashboard this is acceptable; for an audit log it would not be.
+To handle cloud network instability, the client implements an automatic reconnection mechanism using an exponential backoff strategy where the retry interval starts at 1s and doubles after each failure up to 30s. This logic incorporates jitter to prevent a "thundering-herd" surge on the Gateway during service recovery, while a **manuallyClosed** flag differentiates intentional user actions from network faults to ensure reconnection loops only trigger when necessary.
+Upon reconnecting, the server pushes an **initial_state** from Cosmos DB to ensure the UI is **state-correct** by reflecting accurate data even if it is not event-complete due to missed notifications. This trade-off prioritizes data integrity over event history.
 
 ### 6.2 Built-in Recovery Mechanisms
 
@@ -237,25 +238,30 @@ The underlying infrastructure is designed to tolerate both node-level and zone-l
 
 ---
 
-## 7. Comparison with Real-World Systems - can someone actually google this? thx !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+## 7. Comparison with Real-World Systems - Netflix Keystone Pipeline
+The architecture implemented in this project reflects high-scale patterns used by global platforms to handle massive data streams. A primary example is Netflix, which utilizes a system known as the Keystone Pipeline for its unified event-driven platform.
 
-Our architecture is a small-scale instance of patterns that operate at internet scale in production. We contrast with two publicly-documented examples.
+## 7.1 Architectural Parallels
+Much like our design, where Service A (Listmonk) is decoupled from the analytics pipeline via Azure Service Bus, Netflix utilizes Apache Kafka to separate producers from consumers [S1]. In our system, the Service Bus absorbs traffic spikes and ensures that analytics processing does not exert backpressure on the main proxy. This mirrors Netflix’s commitment to ensuring that data ingestion never degrades the performance of the users [S1]. Our Azure Function acts as a serverless event processor, but Netflix has dedicated stream processing jobs like Apache Samza and later Apache Flink which consume from the log and emit to real-time stores [S2].
 
-### 7.1 Netflix Keystone Pipeline
+## 7.2 Data Consistency and Storage
+Netflix’s Keystone pipeline operates at a scale of over a trillion events per day and prioritizes high availability, aligning with the AP (Availability and Partition-tolerance) model of the CAP theorem. Similarly, we adopted an AP model for our analytics use case, accepting that the dashboard is eventually consistent with the true state of the application. For storage, we used Azure Cosmos DB with Session consistency to balance performance and accuracy. This approach is comparable to Netflix’s use of distributed NoSQL stores (like Cassandra) to provide high-speed writes for real-time telemetry without the overhead of strong global consistency [S2].
 
-Netflix's *Keystone* is their unified event-ingestion and routing platform, carrying on the order of a trillion events per day. Producers publish to a Kafka fronting layer; a Keystone router copies events to downstream Kafka clusters and to S3 for batch; stream-processing jobs (originally Samza, later Flink) consume from Kafka and emit to real-time stores and dashboards.
+## 7.3 Key Differences at Scale
+A fundamental difference lies in the storage model: while our current Service Bus removes messages upon a successful acknowledgment, Netflix’s Kafka infrastructure provides a partitioned, replayable log [S1]. This allows Netflix to re-process historical data in case of a downstream bug, a level of resilience beyond our current scope. Additionally, while our project uses a WebSocket Gateway to push live updates to a dashboard, Netflix uses a complex architecture to serve diverse internal services, from billing to content recommendation engines [S1].
 
-The parallels to our system are strong: Netflix's Kafka corresponds to our Service Bus, their Samza / Flink jobs to our Azure Function, and their real-time analytics stores to our Cosmos DB + dashboard. Both share the core commitment that producers are **decoupled from consumers by a durable message log**, and that real-time consumers are independent of batch consumers.
+References
+[S1] Keystone Real-time Stream Processing Platform (Netflix Technology Blog): https://netflixtechblog.com/keystone-real-time-stream-processing-platform-a3ee651812a
 
-The differences are telling. Kafka provides a **partitioned, replayable log** where consumers track their own offsets; Service Bus is a **queue / topic model** where the broker tracks delivery and acks. Kafka's model enables re-processing arbitrary historical windows — invaluable when a downstream bug is discovered — whereas Service Bus does not, because messages are removed on successful ack. Netflix's use of stateful stream processors (Flink with RocksDB-backed local state) also allows far richer aggregations than a single-event-in, single-write-out function. For our scale and use case, Service Bus + Azure Functions is an appropriate fit; at Netflix's scale the Kafka model becomes essential.
+[S2] Evolution of the Netflix Data Pipeline (Netflix Technology Blog): https://netflixtechblog.com/evolution-of-the-netflix-data-pipeline-da246ca36905
 
 ---
 
-## 8 Use of AI Tools idk mai bagati si voi cv :thumbs_up:
+## 8 Use of AI Tools
 
-In accordance with the project's transparency requirements, we disclose the following use of generative AI tools during this project:
+The following AI tools were used during this project:
 
 * **Claude (Anthropic):** used to draft and refine the structure and language of this report.
 * **GitHub Copilot:** used to autocomplete boilerplate in the Azure Function handler and suggest Kubernetes manifest patterns.
 
-Every piece of AI-generated content was reviewed, tested, and adapted by the team. All architectural decisions, correctness analyses (notably the idempotency critique in Section 4.3), load-test designs, interpretations of results, and conclusions were authored by the team. AI tools served as accelerators for well-understood tasks — boilerplate code, document phrasing, configuration lookup — and were not treated as authoritative for correctness or design.
+The team reviewed, tested, and adapted every AI-generated contribution. All architectural decisions, correctness analyses (notably the idempotency critique in Section 4.3), load-test designs, interpretations of results, and conclusions were authored by the team. AI tools were mostly used to understanding the tasks, document phrasing, configuration lookup and design choices.
