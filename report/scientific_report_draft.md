@@ -58,7 +58,7 @@ To ensure a reproducible, production-grade environment, the entire cloud footpri
 
 ---
 
-## 3. Communication Analysis — Synchronous vs. Asynchronous
+## 3. Communication Analysis - Synchronous vs. Asynchronous
 
 | # | Interaction | Style | Protocol | Justification |
 | --- | --- | --- | --- | --- |
@@ -99,11 +99,11 @@ Service Bus guarantees **at-least-once** delivery: the Function may see the same
 
 ### 4.4 Consistency Window
 
-The *consistency window* — the time between a user action and its reflection on the dashboard — is the sum of: proxy publish latency, Service Bus enqueue-to-deliver time, Function cold-start (if any) or warm-invocation time, Cosmos DB write round-trip, HTTP POST to Gateway, and WebSocket broadcast. We measure this window empirically by recording a `lastEventAt` timestamp at the proxy on every publish and computing `receivedAt − lastEventAt` at the WebSocket Gateway `/notify` endpoint, where `receivedAt` is the wall-clock time the notification arrives from the Function.
+The *consistency window* - the time between a user action and its reflection on the dashboard - is the sum of: proxy publish latency, Service Bus enqueue-to-deliver time, Function cold-start (if any) or warm-invocation time, Cosmos DB write round-trip, HTTP POST to Gateway, and WebSocket broadcast. We measure this window empirically by recording a `lastEventAt` timestamp at the proxy on every publish and computing `receivedAt − lastEventAt` at the WebSocket Gateway `/notify` endpoint, where `receivedAt` is the wall-clock time the notification arrives from the Function.
 
 Measured under steady traffic, the consistency window was bimodal: warm Function invocations completed the full pipeline in **89–165 ms** (p50 ≈ 100 ms, p95 ≈ 200 ms), while the first invocation after a cold-start spike reached **~16 s**. This cold-start outlier corresponds to the Azure Function Consumption plan provisioning a new instance, which confirms the analysis in Section 5.3.
 
-![Consistency Window — p50/p95/p99 under steady load](images/consystency-window.jpg)
+![Consistency Window - p50/p95/p99 under steady load](images/consystency-window.jpg)
 
 ---
 
@@ -121,7 +121,7 @@ We used **Grafana k6** to drive load against the public endpoint of the Listmonk
     checks_failed..................: 10.85%  14593 out of 134419
 
     status is 200
-      ↳  89% — ✓ 119826 / ✗ 14593
+      ↳  89% - ✓ 119826 / ✗ 14593
 
     HTTP
     http_req_duration..............: avg=861.99ms min=51.18ms  med=118.49ms max=1m0s   p(90)=1.53s   p(95)=2.81s
@@ -191,17 +191,17 @@ Distribution
 
 ### 5.4 Scaling Behaviour
 
-* **Listmonk Proxy & Frontend** — both scale horizontally on AKS via a `HorizontalPodAutoscaler` (CPU target: 70%, min: 2, max: 4 replicas). Both tiers are stateless, so no sticky sessions are required. During our load test, the Listmonk deployment scaled from 2 to 3 replicas within approximately two minutes as CPU crossed the threshold.
-* **AKS Cluster Autoscaler** — when pending pods cannot be scheduled due to insufficient node capacity, the Cluster Autoscaler provisions additional Standard_B2s_v2 nodes (up to 4) in the user pool across the two configured Availability Zones. Node scale-in is triggered after ten minutes of sustained under-utilisation, subject to pod disruption constraints.
-* **Azure Function** — auto-scales from 0 to 200 instances on the Consumption plan, driven by a queue-length heuristic in the Service Bus scale controller. Scale-out is not instantaneous; cold starts add observable tail latency.
-* **Cosmos DB serverless** — scales RU capacity automatically but is capped at 5,000 RU/s per container. Beyond this ceiling the provisioned or autoscale mode becomes necessary; partition-key design (`/resourceType`) ensures writes distribute across physical partitions.
-* **WebSocket Gateway** — the hardest tier to scale: a given client's connection terminates at one pod, so scaling out requires either (a) sticky-session load balancing, or (b) a pub/sub fan-out between gateway replicas so that a `/notify` POST to any pod reaches clients attached to every pod. The current implementation intentionally runs at a single replica; horizontal scaling of the gateway is identified as future work.
+* **Listmonk Proxy & Frontend** - both scale horizontally on AKS via a `HorizontalPodAutoscaler` (CPU target: 70%, min: 2, max: 4 replicas). Both tiers are stateless, so no sticky sessions are required. During our load test, the Listmonk deployment scaled from 2 to 3 replicas within approximately two minutes as CPU crossed the threshold.
+* **AKS Cluster Autoscaler** - when pending pods cannot be scheduled due to insufficient node capacity, the Cluster Autoscaler provisions additional Standard_B2s_v2 nodes (up to 4) in the user pool across the two configured Availability Zones. Node scale-in is triggered after ten minutes of sustained under-utilisation, subject to pod disruption constraints.
+* **Azure Function** - auto-scales from 0 to 200 instances on the Consumption plan, driven by a queue-length heuristic in the Service Bus scale controller. Scale-out is not instantaneous; cold starts add observable tail latency.
+* **Cosmos DB serverless** - scales RU capacity automatically but is capped at 5,000 RU/s per container. Beyond this ceiling the provisioned or autoscale mode becomes necessary; partition-key design (`/resourceType`) ensures writes distribute across physical partitions.
+* **WebSocket Gateway** - the hardest tier to scale: a given client's connection terminates at one pod, so scaling out requires either (a) sticky-session load balancing, or (b) a pub/sub fan-out between gateway replicas so that a `/notify` POST to any pod reaches clients attached to every pod. The current implementation intentionally runs at a single replica; horizontal scaling of the gateway is identified as future work.
 
-The Grafana panels below capture the HPA scale-out event in real time — replica count rising from 2 to 4 alongside CPU saturation and the resulting latency profile — and the Kubernetes workload recovery view showing pods returning to `Running` after the scale event.
+The Grafana panels below capture the HPA scale-out event in real time - replica count rising from 2 to 4 alongside CPU saturation and the resulting latency profile - and the Kubernetes workload recovery view showing pods returning to `Running` after the scale event.
 
-![HPA scale-out — replicas, CPU, memory and latency under load](images/latency+replicas+cpu+mem-under-load.jpg)
+![HPA scale-out - replicas, CPU, memory and latency under load](images/latency+replicas+cpu+mem-under-load.jpg)
 
-![Self-healing and auto-scaling — Kubernetes workload recovery](images/self-healing&auto-scaling.jpg)
+![Self-healing and auto-scaling - Kubernetes workload recovery](images/self-healing&auto-scaling.jpg)
 
 ---
 
@@ -214,27 +214,27 @@ Upon reconnecting, the server pushes an **initial_state** from Cosmos DB to ensu
 
 ### 6.2 Built-in Recovery Mechanisms
 
-* **Kubernetes self-healing** — every application workload runs as a `Deployment`. If a pod crashes or fails its liveness probe, the Kubernetes controller manager immediately schedules a replacement on a healthy node. The desired replica count is continuously reconciled; the system converges back to the declared state without operator intervention. We observed this behaviour directly during load testing: the PostgreSQL pod was OOMKilled by the Linux kernel when memory pressure on the node spiked, entered `CrashLoopBackOff`, and was automatically restarted and restored to `Running` within approximately 90 seconds — with no operator intervention.
+* **Kubernetes self-healing** - every application workload runs as a `Deployment`. If a pod crashes or fails its liveness probe, the Kubernetes controller manager immediately schedules a replacement on a healthy node. The desired replica count is continuously reconciled; the system converges back to the declared state without operator intervention. We observed this behaviour directly during load testing: the PostgreSQL pod was OOMKilled by the Linux kernel when memory pressure on the node spiked, entered `CrashLoopBackOff`, and was automatically restarted and restored to `Running` within approximately 90 seconds - with no operator intervention.
 
 ![PostgreSQL OOMKill and automatic self-healing recovery](images/postgres-self-healingOOM.jpg)
 
-![Kubernetes workload view — pods returning to Running after OOMKill](images/self-healing&auto-scaling.jpg)
+![Kubernetes workload view - pods returning to Running after OOMKill](images/self-healing&auto-scaling.jpg)
 
-* **At-least-once delivery + idempotent storage** — messages survive transient consumer failures without manual intervention.
-* **Dead-letter subscription** — permanent "poison" messages are isolated after ten failures so they do not block the subscription.
-* **Timeouts on fire-and-forget calls** — prevent a slow dependency from cascading into latency on the critical path.
-* **Stateless front tiers** — proxy and gateway pods can be replaced or restarted with no data loss.
-* **Declarative infrastructure** — the entire environment is reproducible from Terraform + Helmfile; recovery from catastrophic data-plane loss is bounded by the time to `terraform apply && helmfile sync`.
+* **At-least-once delivery + idempotent storage** - messages survive transient consumer failures without manual intervention.
+* **Dead-letter subscription** - permanent "poison" messages are isolated after ten failures so they do not block the subscription.
+* **Timeouts on fire-and-forget calls** - prevent a slow dependency from cascading into latency on the critical path.
+* **Stateless front tiers** - proxy and gateway pods can be replaced or restarted with no data loss.
+* **Declarative infrastructure** - the entire environment is reproducible from Terraform + Helmfile; recovery from catastrophic data-plane loss is bounded by the time to `terraform apply && helmfile sync`.
 
 ### 6.3 Infrastructure Resilience
 
 The underlying infrastructure is designed to tolerate both node-level and zone-level failures:
 
-* **Availability Zone distribution** — the AKS user node pool spans two Azure Availability Zones (1 and 2). Each zone is a physically separate datacenter with independent power, cooling and networking. A complete zone outage removes at most half the nodes, but because pod anti-affinity distributes replicas across zones, every service retains at least one healthy pod.
-* **Pod anti-affinity** — `requiredDuringSchedulingIgnoredDuringExecution` anti-affinity rules on Listmonk and the WebSocket Gateway prevent co-location of replicas on the same node. Combined with the multi-zone node pool, this means a single hardware failure cannot take an entire service offline.
-* **Node autoscaling across zones** — the Cluster Autoscaler provisions replacement or additional nodes across both zones (up to 4 total). New nodes satisfy pending pod scheduling requests within minutes, restoring full capacity automatically.
-* **Persistent data protection** — PostgreSQL and Cosmos DB data is protected at the storage layer. The PostgreSQL PVC is backed by an Azure Managed Disk with `prevent_destroy = true` in Terraform, ensuring it survives cluster teardown and rebuild. Cosmos DB is similarly protected and replicates data within the Azure region.
-* **Automatic TLS renewal** — cert-manager continuously monitors certificate expiry and renews Let's Encrypt certificates before they lapse, eliminating a class of availability failures caused by expired TLS.
+* **Availability Zone distribution** - the AKS user node pool spans two Azure Availability Zones (1 and 2). Each zone is a physically separate datacenter with independent power, cooling and networking. A complete zone outage removes at most half the nodes, but because pod anti-affinity distributes replicas across zones, every service retains at least one healthy pod.
+* **Pod anti-affinity** - `requiredDuringSchedulingIgnoredDuringExecution` anti-affinity rules on Listmonk and the WebSocket Gateway prevent co-location of replicas on the same node. Combined with the multi-zone node pool, this means a single hardware failure cannot take an entire service offline.
+* **Node autoscaling across zones** - the Cluster Autoscaler provisions replacement or additional nodes across both zones (up to 4 total). New nodes satisfy pending pod scheduling requests within minutes, restoring full capacity automatically.
+* **Persistent data protection** - PostgreSQL and Cosmos DB data is protected at the storage layer. The PostgreSQL PVC is backed by an Azure Managed Disk with `prevent_destroy = true` in Terraform, ensuring it survives cluster teardown and rebuild. Cosmos DB is similarly protected and replicates data within the Azure region.
+* **Automatic TLS renewal** - cert-manager continuously monitors certificate expiry and renews Let's Encrypt certificates before they lapse, eliminating a class of availability failures caused by expired TLS.
 
 ---
 

@@ -1,7 +1,7 @@
 {
   "name": "event-processor",
   "version": "1.0.0",
-  "description": "Azure Function — processes Service Bus events, writes to Cosmos DB",
+  "description": "Azure Function - processes Service Bus events, writes to Cosmos DB",
   "main": "src/index.js",
   "scripts": {
     "start": "func start"

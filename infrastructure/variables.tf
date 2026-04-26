@@ -41,6 +41,6 @@ variable "servicebus_sku" {
 
 variable "websocket_notify_url" {
   type        = string
-  description = "Internal URL of the WebSocket gateway /notify endpoint — set after AKS deploy"
+  description = "Internal URL of the WebSocket gateway /notify endpoint - set after AKS deploy"
   default     = ""
 }

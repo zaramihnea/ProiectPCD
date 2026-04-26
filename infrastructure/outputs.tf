@@ -1,6 +1,6 @@
 output "acr_login_server" {
   value       = azurerm_container_registry.main.login_server
-  description = "ACR login server — use in helm env.yaml as acrLoginServer"
+  description = "ACR login server - use in helm env.yaml as acrLoginServer"
 }
 
 output "aks_cluster_name" {
@@ -17,7 +17,7 @@ output "aks_kube_config" {
 output "servicebus_connection_string" {
   value       = azurerm_servicebus_namespace.main.default_primary_connection_string
   sensitive   = true
-  description = "Service Bus connection string — inject into Listmonk via Helm secrets"
+  description = "Service Bus connection string - inject into Listmonk via Helm secrets"
 }
 
 output "cosmosdb_endpoint" {
@@ -49,10 +49,10 @@ output "log_analytics_workspace_id" {
 
 output "dns_nameservers" {
   value       = azurerm_dns_zone.main.name_servers
-  description = "Azure DNS nameservers — point proiectpcd.online registrar to these"
+  description = "Azure DNS nameservers - point proiectpcd.online registrar to these"
 }
 
 output "kubelet_identity_client_id" {
   value       = azurerm_kubernetes_cluster.main.kubelet_identity[0].client_id
-  description = "AKS kubelet identity client ID — used by cert-manager for DNS-01"
+  description = "AKS kubelet identity client ID - used by cert-manager for DNS-01"
 }

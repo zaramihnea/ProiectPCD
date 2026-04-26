@@ -1,7 +1,7 @@
 const { app } = require("@azure/functions");
 const { CosmosClient } = require("@azure/cosmos");
 
-// Cosmos DB client — reused across invocations (warm start optimisation)
+// Cosmos DB client - reused across invocations (warm start optimisation)
 const cosmosClient = new CosmosClient({
   endpoint: process.env.COSMOS_ENDPOINT,
   key: process.env.COSMOS_KEY,
@@ -10,7 +10,7 @@ const cosmosClient = new CosmosClient({
 const database = cosmosClient.database(process.env.COSMOS_DATABASE);
 const eventsContainer = database.container(process.env.COSMOS_CONTAINER);
 
-// Aggregated stats container — same DB, different container
+// Aggregated stats container - same DB, different container
 const statsContainer = database.container("stats");
 
 const COUNTER_BY_EVENT_TYPE = {
@@ -170,15 +170,15 @@ app.serviceBusTopic("processResourceEvent", {
           signal: AbortSignal.timeout(3000),
         });
       } catch (err) {
-        // Non-fatal — WebSocket Gateway may not be up yet
+        // Non-fatal - WebSocket Gateway may not be up yet
         context.warn("Failed to notify WebSocket Gateway:", err.message);
       }
     }
 
     if (stats) {
-      context.log(`Done: ${type} ${resourceType} — stats: created=${stats.totalCreated} accessed=${stats.totalAccesses}`);
+      context.log(`Done: ${type} ${resourceType} - stats: created=${stats.totalCreated} accessed=${stats.totalAccesses}`);
     } else {
-      context.log(`Done: ${type} ${resourceType} — no aggregate counter configured`);
+      context.log(`Done: ${type} ${resourceType} - no aggregate counter configured`);
     }
   },
 });

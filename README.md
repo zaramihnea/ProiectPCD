@@ -1,4 +1,4 @@
-# ProiectPCD — Real-Time Analytics Dashboard
+# ProiectPCD - Real-Time Analytics Dashboard
 
 A cloud-native distributed system built on Microsoft Azure that adds a real-time analytics pipeline on top of [Listmonk](https://listmonk.app), an open-source newsletter manager. Events are captured via a reverse proxy, processed asynchronously by an Azure Function, stored in Cosmos DB, and pushed live to a browser dashboard over WebSockets.
 
@@ -32,7 +32,7 @@ helm plugin install https://github.com/databus23/helm-diff
 
 ---
 
-## Step 1 — Azure Login
+## Step 1 - Azure Login
 
 ```bash
 az login
@@ -41,7 +41,7 @@ az login
 
 ---
 
-## Step 2 — Create the Resource Group
+## Step 2 - Create the Resource Group
 
 The Terraform configuration and `deploy.sh` both assume the resource group `ProiectPCD` exists in `northeurope`. Create it before running Terraform:
 
@@ -51,7 +51,7 @@ az group create --name ProiectPCD --location northeurope
 
 ---
 
-## Step 3 — Configure Terraform
+## Step 3 - Configure Terraform
 
 Create `infrastructure/terraform.tfvars` (this file is gitignored, you have an example in `infrastructure/terraform.tfvars.example`) with your Azure subscription ID:
 
@@ -72,13 +72,13 @@ Terraform provisions: AKS cluster, ACR, Azure Service Bus, Cosmos DB (serverless
 > **DNS nameservers:** After apply, run `terraform output dns_nameservers` and point your domain registrar's nameservers to the four values shown. The domain must resolve through Azure DNS for cert-manager (Let's Encrypt DNS-01 challenge) to work.
 
 > **Using a different domain:** The domain `proiectpcd.online` is hardcoded in three places. Update all three if you use a different domain:
-> 1. `infrastructure/dns.tf` — `name = "proiectpcd.online"`
-> 2. `deploy.sh` — `DOMAIN="proiectpcd.online"`
-> 3. `applications/frontend/src/App.js` — `wss://websocket.proiectpcd.online/ws`
+> 1. `infrastructure/dns.tf` - `name = "proiectpcd.online"`
+> 2. `deploy.sh` - `DOMAIN="proiectpcd.online"`
+> 3. `applications/frontend/src/App.js` - `wss://websocket.proiectpcd.online/ws`
 
 ---
 
-## Step 4 — Create the `.env` file (optional — SMTP only)
+## Step 4 - Create the `.env` file (optional - SMTP only)
 
 `deploy.sh` sources `.env` from the repo root if it exists (you have an example in /.env.example). SMTP configuration is optional; without it the app runs fine but Listmonk cannot send emails.
 
@@ -90,7 +90,7 @@ GMAIL_APP_PASSWORD=xxxx-xxxx-xxxx-xxxx
 
 ---
 
-## Step 5 — Deploy everything
+## Step 5 - Deploy everything
 
 From the repo root:
 
@@ -175,5 +175,5 @@ kubectl run k6 --image=grafana/k6:latest --restart=Never -it --rm \
 
 ## Monitoring
 
-- **Grafana dashboard** — `https://grafana.proiectpcd.online` — shows server-side latency (p50/p95/p99), request rate, error rate, HPA replica count, pod CPU/memory, AKS node count, consistency window, and active WebSocket connections.
-- **Application Insights** — Azure Portal → Function App → Application Insights, for Function invocation traces.
+- **Grafana dashboard** - `https://grafana.proiectpcd.online` - shows server-side latency (p50/p95/p99), request rate, error rate, HPA replica count, pod CPU/memory, AKS node count, consistency window, and active WebSocket connections.
+- **Application Insights** - Azure Portal → Function App → Application Insights, for Function invocation traces.

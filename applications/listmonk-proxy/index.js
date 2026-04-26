@@ -24,7 +24,7 @@ const LISTMONK_URL = process.env.LISTMONK_URL || "http://localhost:9001";
 const SERVICEBUS_CONNECTION_STRING = process.env.SERVICEBUS_CONNECTION_STRING;
 const TOPIC_NAME = process.env.TOPIC_NAME || "resource-events";
 
-// Resources we want to track — maps URL prefix to resource type
+// Resources we want to track - maps URL prefix to resource type
 // /api/* routes capture data mutations from the Listmonk SPA (REST API calls)
 // /admin/* routes capture page views when users navigate the admin panel
 const TRACKED_ROUTES = [
@@ -42,13 +42,13 @@ const TRACKED_ROUTES = [
   { prefix: "/admin/templates",          resource: "template"   },
 ];
 
-// Service Bus sender — lazily initialised so the proxy still works if SB is unavailable
+// Service Bus sender - lazily initialised so the proxy still works if SB is unavailable
 let sbSender = null;
 if (SERVICEBUS_CONNECTION_STRING) {
   const sbClient = new ServiceBusClient(SERVICEBUS_CONNECTION_STRING);
   sbSender = sbClient.createSender(TOPIC_NAME);
 } else {
-  console.warn("SERVICEBUS_CONNECTION_STRING not set — events will not be published");
+  console.warn("SERVICEBUS_CONNECTION_STRING not set - events will not be published");
 }
 
 async function publishEvent(type, resourceType, resourceId, method) {
@@ -65,7 +65,7 @@ async function publishEvent(type, resourceType, resourceId, method) {
     await sbSender.sendMessages({ body: event, contentType: "application/json" });
     console.log(`[SB] published ${event.type} ${event.resourceType}${event.resourceId ? "/" + event.resourceId : ""}`);
   } catch (err) {
-    // Non-fatal — proxy must never fail because of Service Bus
+    // Non-fatal - proxy must never fail because of Service Bus
     console.error("Failed to publish event:", err.message);
   }
 }
@@ -98,7 +98,7 @@ function eventTypeFromRequest(method, path) {
 
 const app = express();
 
-// Prometheus metrics endpoint — must be before the proxy middleware
+// Prometheus metrics endpoint - must be before the proxy middleware
 app.get("/metrics", async (req, res) => {
   res.set("Content-Type", promClient.register.contentType);
   res.send(await promClient.register.metrics());
