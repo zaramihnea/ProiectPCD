@@ -262,5 +262,6 @@ The following AI tools were used during this project:
 
 * **Claude (Anthropic):** used to draft and refine the structure and language of this report.
 * **GitHub Copilot:** used to autocomplete boilerplate in the Azure Function handler and suggest Kubernetes manifest patterns.
+* **AI-assisted test design:** the load testing and end-to-end latency scripts were developed with AI assistance. Having no prior experience with k6 or with measuring distributed pipeline latency, we used AI tools to understand what metrics matter, how to structure k6 scenarios.
 
 The team reviewed, tested, and adapted every AI-generated contribution. All architectural decisions, correctness analyses (notably the idempotency critique in Section 4.3), load-test designs, interpretations of results, and conclusions were authored by the team. AI tools were mostly used to understanding the tasks, document phrasing, configuration lookup and design choices.
