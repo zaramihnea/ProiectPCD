@@ -92,16 +92,16 @@ We selected **Session consistency** for Cosmos DB. This provides monotonic reads
 Service Bus guarantees **at-least-once** delivery: the Function may see the same event twice (for example, if the function crashes after writing to Cosmos DB but before acking the message). Two idempotency mechanisms are in play:
 
 1. **Raw event storage is idempotent.** The upsert into the `events` container uses `eventId` as the document `id`, so a duplicate write is a no-op.
-2. **Aggregate update is *not* fully idempotent in the current implementation.** The read–increment–write pattern against the `stats` container has a race window under duplicate delivery: two concurrent redeliveries of the same event could both read the old counter and both write back `old + 1`, resulting in a net increment of two instead of (correctly) one. We acknowledge this as a known limitation. Two remediations are proposed for future work:
+2. **Aggregate update is *not* fully idempotent in the current implementation.** The read-increment-write pattern against the `stats` container has a race window under duplicate delivery: two concurrent redeliveries of the same event could both read the old counter and both write back `old + 1`, resulting in a net increment of two instead of (correctly) one. We acknowledge this as a known limitation. Two remediations are proposed for future work:
 
     * **(a) Pre-check the events container.** Read `events/{eventId}`; if it already exists with a `processedAt` field, skip the aggregate update.
     * **(b) Cosmos DB stored procedure.** Wrap steps 1 and 2 in a transactional JavaScript stored procedure whose atomicity is guaranteed within a single partition.
 
 ### 4.4 Consistency Window
 
-The *consistency window* - the time between a user action and its reflection on the dashboard - is the sum of: proxy publish latency, Service Bus enqueue-to-deliver time, Function cold-start (if any) or warm-invocation time, Cosmos DB write round-trip, HTTP POST to Gateway, and WebSocket broadcast. We measure this window empirically by recording a `lastEventAt` timestamp at the proxy on every publish and computing `receivedAt − lastEventAt` at the WebSocket Gateway `/notify` endpoint, where `receivedAt` is the wall-clock time the notification arrives from the Function.
+The *consistency window* - the time between a user action and its reflection on the dashboard - is the sum of: proxy publish latency, Service Bus enqueue-to-deliver time, Function cold-start (if any) or warm-invocation time, Cosmos DB write round-trip, HTTP POST to Gateway, and WebSocket broadcast. We measure this window empirically by recording a `lastEventAt` timestamp at the proxy on every publish and computing `receivedAt - lastEventAt` at the WebSocket Gateway `/notify` endpoint, where `receivedAt` is the wall-clock time the notification arrives from the Function.
 
-Measured under steady traffic, the consistency window was bimodal: warm Function invocations completed the full pipeline in **89–165 ms** (p50 ≈ 100 ms, p95 ≈ 200 ms), while the first invocation after a cold-start spike reached **~16 s**. This cold-start outlier corresponds to the Azure Function Consumption plan provisioning a new instance, which confirms the analysis in Section 5.3.
+Measured under steady traffic, the consistency window was bimodal: warm Function invocations completed the full pipeline in **89-165 ms** (p50 ≈ 100 ms, p95 ≈ 200 ms), while the first invocation after a cold-start spike reached **~16 s**. This cold-start outlier corresponds to the Azure Function Consumption plan provisioning a new instance, which confirms the analysis in Section 5.3.
 
 ![Consistency Window - p50/p95/p99 under steady load](images/consystency-window.jpg)
 
