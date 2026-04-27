@@ -17,7 +17,7 @@ The platform is deployed entirely on Microsoft Azure, leveraging AKS, Azure Func
 The system follows an **event-driven architecture** with clear separation between the *transactional path* (user interacts with Listmonk) and the *analytics path* (events flow through a pipeline to a live dashboard). The two paths are decoupled by Azure Service Bus, which provides durable at-least-once message delivery. To achieve this in a cloud-native Azure environment, we mapped the assignment's architectural requirements to the following specific technologies:
 
 **1. Kubernetes Cluster (AKS):**
-All long-running services run inside an Azure Kubernetes Service cluster configured with two node pools. A dedicated *system pool* (Standard_D2s_v3) handles Kubernetes control-plane workloads (CoreDNS, metrics-server, kube-proxy). All application workloads are scheduled exclusively on a *user pool* (Standard_B2s_v2, minimum 2 nodes, maximum 4 nodes) spread across two Azure Availability Zones. Pod anti-affinity rules on Listmonk and the WebSocket Gateway ensure that no two replicas of the same service land on the same node, so a single node failure cannot take an entire service offline. A Cluster Autoscaler monitors pending pods and scales the user node pool out (up to 4 nodes) or in (down to 2) automatically.
+All long-running services run inside an Azure Kubernetes Service cluster configured with two node pools. A dedicated *system pool* (Standard_D2s_v3) handles Kubernetes control-plane workloads (CoreDNS, metrics-server, kube-proxy). All application workloads are scheduled exclusively on a *user pool* (Standard_B2s_v2, minimum 2 nodes, maximum 4 nodes) spread across two Azure Availability Zones. Pod anti-affinity rules on Listmonk ensure that no two replicas land on the same node, so a single node failure cannot take the service offline. The WebSocket Gateway runs as a single replica by design (horizontal scaling requires pub/sub fan-out between pods, identified as future work). Traefik runs as a DaemonSet, placing one pod on every node automatically. A Cluster Autoscaler monitors pending pods and scales the user node pool out (up to 4 nodes) or in (down to 2) automatically.
 
 **2. Ingress & TLS Termination (Traefik):**
 All inbound traffic enters the cluster through **Traefik**, deployed as a DaemonSet on the user node pool and exposed via an Azure Load Balancer. Traefik implements the Kubernetes Gateway API and acts as the single TLS termination point for the custom domain (`proiectpcd.online`), using certificates automatically provisioned by cert-manager from Let's Encrypt. Routing decisions are driven by `HTTPRoute` resources: requests to `listmonk.proiectpcd.online` are forwarded to the Listmonk Proxy service, requests to `websocket.proiectpcd.online` are forwarded to the WebSocket Gateway, and the apex domain serves the Analytics Dashboard. Traefik also handles the HTTP→HTTPS redirect and transparently proxies WebSocket upgrade requests to the Gateway.
@@ -45,7 +45,7 @@ The WebSocket Gateway exposes `/ws` for client connections and `/notify` for the
 
 ![System Architecture Diagram](pcd-infra-arhitecture-2.png)
 
-![resources](resources.png)
+![Azure Resource Group - all provisioned resources for the project](resources.png)
 
 ### 2.2 Infrastructure Automation and Observability
 
@@ -231,9 +231,9 @@ Upon reconnecting, the server pushes an **initial_state** from Cosmos DB to ensu
 The underlying infrastructure is designed to tolerate both node-level and zone-level failures:
 
 * **Availability Zone distribution** - the AKS user node pool spans two Azure Availability Zones (1 and 2). Each zone is a physically separate datacenter with independent power, cooling and networking. A complete zone outage removes at most half the nodes, but because pod anti-affinity distributes replicas across zones, every service retains at least one healthy pod.
-* **Pod anti-affinity** - `requiredDuringSchedulingIgnoredDuringExecution` anti-affinity rules on Listmonk and the WebSocket Gateway prevent co-location of replicas on the same node. Combined with the multi-zone node pool, this means a single hardware failure cannot take an entire service offline.
+* **Pod anti-affinity** - `requiredDuringSchedulingIgnoredDuringExecution` anti-affinity rules on Listmonk prevent co-location of replicas on the same node. Combined with the multi-zone node pool, this means a single hardware failure cannot take an entire service offline.
 * **Node autoscaling across zones** - the Cluster Autoscaler provisions replacement or additional nodes across both zones (up to 4 total). New nodes satisfy pending pod scheduling requests within minutes, restoring full capacity automatically.
-* **Persistent data protection** - PostgreSQL and Cosmos DB data is protected at the storage layer. The PostgreSQL PVC is backed by an Azure Managed Disk with `prevent_destroy = true` in Terraform, ensuring it survives cluster teardown and rebuild. Cosmos DB is similarly protected and replicates data within the Azure region.
+* **Persistent data protection** - PostgreSQL and Cosmos DB data is protected at the storage layer. The PostgreSQL PVC is backed by an Azure Managed Disk, ensuring data persists independently of the application pod lifecycle and survives cluster teardown and rebuild. Cosmos DB replicates data within the Azure region.
 * **Automatic TLS renewal** - cert-manager continuously monitors certificate expiry and renews Let's Encrypt certificates before they lapse, eliminating a class of availability failures caused by expired TLS.
 
 ---
